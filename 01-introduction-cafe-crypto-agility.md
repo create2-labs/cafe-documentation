@@ -1,10 +1,29 @@
 # CAFE: Crypto-Agility Framework for Ethereum
 
+## Document versionning
+
+- v0.1.0
+  - Date: Jan 19th, 2026
+  - Author: Oleg Lodygensky
+  - Comments: initial version
+
 ## Introduction
 
 Quantum computing is arriving. It promises major advances in many fields, but this disruptive power also threatens the cryptographic foundations that protect our digital world. Quantum algorithms such as Shor's and Grover's threaten to compromise the asymmetric and symmetric cryptography that secures today's internet communications, financial systems, blockchain networks, and digital identities.
 
 The transition to quantum-resistant cryptography (*post-quantum cryptography* or *PQC*) has become an urgent global priority. Understanding and mitigating this quantum threat is essential to preserve the confidentiality, integrity, and authenticity of our digital assets in the quantum era.
+
+### CAFE Status: Alpha Version
+
+**Important**: CAFE is currently in **alpha version**. All results and features should be taken "as is" for testing and evaluation purposes. The platform is actively being developed and refined based on user feedback.
+
+**Current Objectives**:
+- Test and verify the interest of the Ethereum blockchain ecosystem in our crypto-agility solution
+- Gather valuable feedback from early testers and the community
+- Validate the approach and identify areas for improvement
+- Build understanding of user needs and use cases
+
+We welcome feedback, bug reports, and feature requests from the community to help shape CAFE's development.
 
 ## The Problem: Ethereum's Quantum Vulnerability
 
@@ -46,15 +65,33 @@ Three critical states can be identified:
 
 3. **🟢 CAFE Wallet Attached** — The user owns a CAFE Wallet (Account Abstraction wallet using PQC inside a TDX enclave). This represents the most secure configuration available today.
 
-### Network Layer Risk
+### Network Layer Risk: Understanding TLS Endpoint Security
 
-Beyond wallet-level risks, the transport layer (TLS/HTTPS) connecting users to blockchain infrastructure also presents quantum vulnerabilities:
+Beyond wallet-level risks, the transport layer (TLS/HTTPS) connecting users to blockchain infrastructure also presents quantum vulnerabilities. Understanding these risks is important for users to make informed decisions about which endpoints to trust.
+
+**The Current TLS Landscape**
 
 - Most RPC nodes, APIs, and blockchain services use classical TLS (ECDHE/ECDSA or RSA)
-- Certificate Authorities still issue X.509 certificates signed with quantum-vulnerable algorithms
-- Few infrastructures deploy post-quantum TLS (hybrid Kyber/Dilithium modes)
+- Certificate Authorities (CAs) still issue X.509 certificates signed with quantum-vulnerable algorithms (ECDSA, RSA)
+- Pure post-quantum TLS is not yet possible today—we are waiting for PKI migration to support certificates with PQC signatures
+- However, what **is feasible today** is deploying TLS 1.3+ with post-quantum Key Encapsulation Mechanisms (KEM) to combat the "harvest now, decrypt later" threat
 
-This means that even if a wallet is locally secure, the communication channel may remain vulnerable to future quantum attacks.
+**What CAFE TLS Scanning Verifies**
+
+CAFE's TLS scanning focuses on verifying that endpoints:
+- Use **TLS 1.3 or higher** (modern, secure protocol)
+- Support **post-quantum KEM** (Key Encapsulation Mechanisms like ML-KEM/Kyber) in hybrid mode
+- This provides protection against "harvest now, decrypt later" attacks on encrypted traffic
+
+**Important Limitations**
+
+- **Pure PQC TLS is not possible today** — Full post-quantum TLS requires PQC certificates, which are not yet available from Certificate Authorities
+- **PKI migration is pending** — We are waiting for the broader PKI ecosystem to migrate to post-quantum certificate signing
+- ⚠️ **CAFE does not provide TLS remediation** ⚠️ — Our TLS scans are informational only, designed to help users understand endpoint security posture and make informed choices about which services to use
+
+**Why This Matters**
+
+Even if a wallet is locally secure, the communication channel may remain vulnerable to future quantum attacks if endpoints don't support post-quantum KEM. CAFE's TLS scanning helps users identify which endpoints provide better quantum resistance in their TLS handshakes, enabling informed decisions about endpoint selection.
 
 ### Current Recommendations
 
@@ -72,11 +109,11 @@ The main recommendations include:
 
 | Aspect           | Current Ethereum              | Quantum Status               | Migration Path                         |
 | ---------------- | ----------------------------- | ---------------------------- | -------------------------------------- |
-| Signature        | ECDSA (secp256k1)             | ❌ Broken by Shor             | Replace via smart-wallet               |
+| Signature        | ECDSA (secp256k1)             | ❌ Broken by Shor             | Replace via smart-wallet                |
 | Address          | Keccak-256(pubkey) → 20 bytes | ✅ Grover-safe (~128-bit)     | Keep short hashes              |
 | Storage funds    | Hidden pubkey                 | ✅ Safe (for now)             | Avoid reusing addresses                |
-| Active wallets   | Pubkey exposed                | ⚠️ Vulnerable on quantum day | Move to ERC-4337                       |
-| PQC-ready option | None natively                 | 🚧 In research               | Use ERC-4337 upgradeable policy |
+| Active wallets   | Pubkey exposed                | ⚠️ Vulnerable on quantum day | Move to smart-wallet (EIP7702; ERC4337)                       |
+| PQC-ready option | None natively                 | 🚧 In research               | Use smart wallet upgradeable policy |
 
 ## The Solution: Crypto-Agility Framework for Ethereum (CAFE)
 
@@ -90,9 +127,18 @@ Rather than a one-time migration, crypto-agility establishes a continuous capabi
 
 **Crypto-Agility Framework for Ethereum (CAFE)** is a three-service platform designed to discover, govern, and remediate cryptographic assets on Ethereum—ensuring compliance, resilience, and trust in the post-quantum and zero-knowledge era.
 
-CAFE operationalizes PQFIF principles on Ethereum with ERC-4337 AA wallets, confidential computing, and ZK-verifiable policy enforcement.
+
+**CAFE's core mission** is to secure Ethereum wallets against quantum threats. The platform's primary focus is on wallet discovery, risk assessment, and remediation—helping users migrate from vulnerable EOA wallets to quantum-safe Account Abstraction wallets using post-quantum cryptography.
+
+While CAFE includes TLS endpoint scanning capabilities, this feature serves an **informational purpose only** to help users understand the quantum risks associated with the endpoints they connect to (RPC nodes, APIs, blockchain services). CAFE does **not** provide remediation services for TLS endpoints.
+
+CAFE operationalizes PQFIF principles on Ethereum with smart wallets (EIP7702, ERC-4337), PQC library, and ZK-verifiable policy enforcement.
 
 CAFE delivers significant value under DORA (*Digital Operational Resilience Act*), as DORA applies to financial institutions and their ICT service providers—especially those handling cryptography, keys, transaction integrity, or critical digital operations. CAFE gives institutions the technical evidence and resilience mechanisms that DORA expects.
+
+**Current Status: Alpha Version**
+
+CAFE is currently in **alpha version**. Results should be taken "as is" for testing and evaluation purposes. The current objective is to test and verify the interest of the Ethereum blockchain ecosystem in our solution and gather valuable feedback from early adopters.
 
 ### Three-Layer Architecture
 
@@ -100,14 +146,14 @@ CAFE unifies four integrated layers:
 
 | Service        | Goal                                                                  | Key Functions                                        | Output                          |
 | ------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------- |
-| **Discovery**      | Identify on-chain and network quantum exposures                           | Wallet scan, EOA/AA detection, TLS audit, NIST level     | On-chain CBOM (Crypto BOM)          |
+| **Discovery**      | Identify on-chain and network quantum exposures                           | Wallet scan, EOA/AA detection, TLS audit, NIST level     | [CBOM (Crypto BOM)](https://cyclonedx.org/capabilities/cbom/)          |
 | **Crypto Policy Manager**        | Define and apply cryptographic governance policies                        | JSON policy, enforcement API                             | Policy snapshot + compliance status |
 | **Remediation**    | Securely sign and migrate wallets using PQC + ZK  | Key generation, ZK attestation, proxy signing (ERC-4337) | Signed TX + verifiable audit logs   |
-| **Infrastructure** | Orchestrate and monitor the full CAFE ecosystem                           | Resource provisioning, telemetry, message bus          | Logs, metrics, audit trail          |
+| **Infrastructure** | Orchestrate and monitor the full CAFE ecosystem                           | Resource provisioning, orhcestration, security, telemetry etc.          | Logs, metrics, audit trail          |
 
 ### Discovery: Cryptographic Visibility and Risk Mapping
 
-**Discovery** is the entry point of CAFE. It provides a complete, verifiable inventory of an institution's cryptographic posture across Ethereum and connected systems.
+**Discovery** is the entry point of CAFE. It provides a complete, verifiable inventory of cryptographic posture across Ethereum and connected systems.
 
 #### Objectives
 
@@ -127,15 +173,22 @@ Discovery analyzes Ethereum wallets (EOAs) across multiple chains to determine t
 - NIST security level calculation
 - Multi-chain support (Ethereum, Arbitrum, Polygon, Base, Optimism, etc.)
 
-**Endpoint TLS Security Audit**
+**Endpoint TLS Security Audit (Informational)**
 
 Discovery evaluates the quantum-security posture of blockchain endpoints (RPC nodes, APIs, relays) by analyzing:
 
-- TLS Version — Detection of TLS 1.2 vs 1.3
+- TLS Version — Detection of TLS 1.2 vs 1.3 (TLS 1.3+ is required for modern security)
+- Post-Quantum KEM Support — Detection of post-quantum Key Encapsulation Mechanisms (ML-KEM/Kyber) in hybrid mode
 - Cipher Suites — Analysis of negotiated encryption algorithms
-- Post-Quantum Readiness — Detection of PQC algorithms (ML-KEM, ML-DSA, etc.)
-- Certificate Analysis — Evaluation of X.509 certificate signatures and chains
+- Certificate Analysis — Evaluation of X.509 certificate signatures and chains (note: PQC certificates are not yet available from CAs)
 - NIST Security Levels — Classification of cryptographic components according to NIST PQC standards
+
+**Important Notes on TLS Scanning:**
+
+- **Complexity**: TLS scanning is complex due to the multi-layered nature of TLS handshakes, certificate chains, and algorithm negotiation
+- **Pure PQC Not Possible**: Pure post-quantum TLS is not possible today because Certificate Authorities do not yet issue PQC-signed certificates
+- **What We Verify**: CAFE focuses on verifying TLS 1.3+ with post-quantum KEM support, which provides protection against "harvest now, decrypt later" attacks
+- **Informational Only**: TLS scan results are provided for informational purposes to help users understand endpoint security posture—CAFE does not provide TLS remediation services
 
 **Cryptographic Bill of Materials (CBOM)**
 
@@ -146,13 +199,45 @@ Discovery generates standardized CBOM entries that provide a complete inventory 
 - Hash functions used for entropy and signing
 - Presence or absence of PQC
 
+### Discovery: Future Work
+
+Discovery is continuously evolving to provide deeper insights into wallet security and quantum risk assessment. Planned enhancements include:
+
+#### Wallet Blast Radius Analysis
+
+Public key exposure assessment is only the first step in security assessment. EOA owners must understand and verify the **impact** of such a security breach on their overall wallet usage and operations.
+
+**Blast Radius** analysis will extend wallet risk assessment by analyzing:
+
+- **Multi-Signature Wallets** — Impact of public key exposure on multi-sig configurations and threshold requirements
+- **Interchain Bridges** — Risk propagation across blockchain bridges when a wallet key is exposed
+- **DeFi Interactions** — Impact on DeFi positions, liquidity pools, and smart contract interactions
+- **Web2-Web3 Links** — Analysis of connections between exposed wallets and centralized services (exchanges, custodians, etc.)
+- **Transaction Patterns** — Understanding how exposed keys affect transaction history and future operations
+- **Asset Exposure** — Comprehensive view of all assets and positions at risk if a key is compromised
+
+This analysis will help users understand not just *that* their wallet is at risk, but *what* is at risk and *how* a quantum attack could impact their entire blockchain ecosystem.
+
+#### AI-Powered Scan Analysis
+
+To provide more actionable insights and automated risk assessment, CAFE is exploring AI-powered analysis capabilities:
+
+- **Intelligent Risk Scoring** — Machine learning models trained on blockchain patterns to provide more accurate risk assessments
+- **Anomaly Detection** — Identify unusual patterns in wallet behavior that may indicate security concerns
+- **Predictive Analysis** — Forecast potential security issues based on wallet usage patterns and blockchain trends
+- **Automated Recommendations** — AI-generated, context-aware security recommendations tailored to specific wallet configurations and usage patterns
+- **Pattern Recognition** — Detect common vulnerabilities and attack vectors across the Ethereum ecosystem
+- **Natural Language Insights** — Convert complex cryptographic and blockchain data into understandable, actionable security insights
+
+These AI capabilities will help users make informed decisions about wallet security without requiring deep technical expertise in cryptography or blockchain technology.
+
 ### Crypto Policy Manager: Governance, Policies, and Continuous Compliance
 
-The **Crypto Policy Manager** transforms cryptographic visibility into actionable governance.
+The Crypto Policy Manager transforms cryptographic visibility into actionable governance.
 
 #### Objectives
 
-Enable institutions to define, enforce, and attest cryptographic policies across Ethereum operations—ensuring alignment with DORA, NIST, ANSSI, and internal risk frameworks.
+Enable to define, enforce, and attest cryptographic policies across Ethereum operations—ensuring alignment with DORA, NIST, ANSSI, and internal risk frameworks.
 
 #### Core Functions
 
@@ -163,11 +248,13 @@ Enable institutions to define, enforce, and attest cryptographic policies across
 
 ### Remediation: PQC Migration and Attested Key Operations
 
-**Remediation** is CAFE's execution layer: it performs cryptographic operations under strict guarantees of confidentiality, integrity, and policy compliance.
+**Remediation** is CAFE's execution layer and **core business focus**: it performs cryptographic operations for wallet security under strict guarantees of confidentiality, integrity, and policy compliance.
+
+**This is CAFE's primary value proposition**—providing secure wallet migration and quantum-safe signing services for Ethereum wallets.
 
 #### Objectives
 
-Upgrade vulnerable assets, securely generate new keys, and sign Ethereum transactions using PQC algorithms—without ever exposing private keys.
+Upgrade vulnerable wallet assets, securely generate new PQC keys, and sign Ethereum transactions using post-quantum algorithms—without ever exposing private keys.
 
 #### Core Functions
 
@@ -176,15 +263,8 @@ Upgrade vulnerable assets, securely generate new keys, and sign Ethereum transac
 - **Proxy Signing (ERC-4337)** — Signs user operations (UserOps) without exposing private material
 - **Zero-Knowledge Attestations** — Every signature, key generation, or migration step can be validated using ZK proofs
 
-### Infrastructure: Orchestration, Monitoring, and Evidence Generation
+**Note**: again, CAFE provides remediation services **only for wallets**, not for TLS endpoints. TLS scanning is informational only—users must work with their endpoint providers to improve TLS security.
 
-The **Infrastructure** layer binds the entire CAFE platform together.
-
-#### Core Functions
-
-- **Telemetry and Observability** — Collects logs, metrics, traces, and events
-- **Message Bus and Workflow Routing** — Coordinates operations between Discovery, Crypto Policy Manager, and Remediation
-- **Attested Evidence Pipeline** — Produces CBOM updates, compliance certificates, ZK proofs, and DORA-ready audit reports
 
 ## Why CAFE is Necessary
 
@@ -220,7 +300,13 @@ CAFE natively supports all EVM-compatible networks with ERC-4337 support:
 
 ## Conclusion
 
-CAFE transforms cryptographic security from a reactive, incident-driven process into a proactive, policy-driven capability. By automating the discovery, classification, and monitoring of cryptographic assets, CAFE transforms quantum security from a theoretical concern into a manageable, measurable capability.
+CAFE transforms wallet security from a reactive, incident-driven process into a proactive, policy-driven capability. By automating the discovery, classification, and monitoring of wallet cryptographic assets, CAFE transforms quantum security from a theoretical concern into a manageable, measurable capability.
+
+**Core Mission**: CAFE's primary focus is on **wallet security**—discovering vulnerable wallets, assessing quantum risks, and providing remediation services to migrate users to quantum-safe Account Abstraction wallets.
+
+**TLS Scanning**: Our TLS endpoint scanning serves an informational purpose, helping users understand the security posture of the endpoints they connect to. While we verify TLS 1.3+ with post-quantum KEM support (what's feasible today), we acknowledge that pure PQC TLS is not yet possible due to pending PKI migration. CAFE does not provide TLS remediation services.
+
+**Alpha Status**: CAFE is currently in alpha version. Results should be taken "as is" for testing and evaluation. Our current objective is to test and verify the interest of the Ethereum blockchain ecosystem in our solution and gather valuable feedback from early adopters.
 
 CAFE is the first step in building crypto-agile infrastructure that can adapt to evolving threats while maintaining operational continuity and regulatory compliance.
 
