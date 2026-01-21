@@ -52,7 +52,6 @@ Authorization: Bearer <your-jwt-token>
 
 - **Direct Backend**: `http://localhost:8080` (development)
 - **Via NGINX**: `https://localhost/api` (production/Docker)
-- **Docker Network**: `http://cafe-discovery-backend:8080` (internal)
 
 ### Environment Variables
 
@@ -353,16 +352,30 @@ Sign in and receive a hybrid PQC JWT token. Requires Cloudflare Turnstile verifi
 <summary>cURL</summary>
 
 ```bash
-# Sign in and save token
-TOKEN=$(curl -s -X POST http://localhost:8080/auth/signin \
+# Sign in and save token to variable
+TOKEN=$(curl -s  -X POST http://localhost:8080/auth/signup \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
     "password": "securepassword",
+    "confirm_password": "securepassword",
     "turnstile_token": "0.abcdefghijklmnopqrstuvwxyz..."
-  }' | jq -r '.token')
+  }'| jq -r '.token')
+  
+echo "Token stored: $TOKEN"
 
-echo "Token: $TOKEN"
+# Use the token in subsequent API calls
+curl -X POST http://localhost:8080/discovery/scan \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+  }'
+
+# Or save token to file for persistence
+echo "$TOKEN" > ~/.cafe_token
+# Later, load token from file
+TOKEN=$(cat ~/.cafe_token)
 ```
 </details>
 
@@ -370,6 +383,19 @@ echo "Token: $TOKEN"
 <summary>Go</summary>
 
 ```go
+package main
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+    "os/user"
+    "path/filepath"
+)
+
 type SigninRequest struct {
     Email          string `json:"email"`
     Password       string `json:"password"`
@@ -384,6 +410,7 @@ type SigninResponse struct {
     } `json:"user"`
 }
 
+// Sign in and return token
 func signin(email, password, turnstileToken string) (string, error) {
     baseURL := "http://localhost:8080"
     
@@ -420,6 +447,65 @@ func signin(email, password, turnstileToken string) (string, error) {
     
     return result.Token, nil
 }
+
+// Save token to file
+func saveToken(token string) error {
+    usr, err := user.Current()
+    if err != nil {
+        return err
+    }
+    
+    tokenFile := filepath.Join(usr.HomeDir, ".cafe_token")
+    return os.WriteFile(tokenFile, []byte(token), 0600)
+}
+
+// Load token from file
+func loadToken() (string, error) {
+    usr, err := user.Current()
+    if err != nil {
+        return "", err
+    }
+    
+    tokenFile := filepath.Join(usr.HomeDir, ".cafe_token")
+    data, err := os.ReadFile(tokenFile)
+    if err != nil {
+        return "", err
+    }
+    
+    return string(data), nil
+}
+
+// Example usage with token storage
+func main() {
+    // Sign in and get token
+    token, err := signin(
+        "user@example.com",
+        "securepassword",
+        "0.abcdefghijklmnopqrstuvwxyz...",
+    )
+    if err != nil {
+        fmt.Printf("Signin error: %v\n", err)
+        return
+    }
+    
+    // Save token for later use
+    if err := saveToken(token); err != nil {
+        fmt.Printf("Error saving token: %v\n", err)
+    } else {
+        fmt.Println("Token saved successfully")
+    }
+    
+    // Later, load token from file
+    savedToken, err := loadToken()
+    if err != nil {
+        fmt.Printf("Error loading token: %v\n", err)
+        return
+    }
+    
+    // Use token in API calls
+    fmt.Printf("Using token: %s...\n", savedToken[:20])
+    // ... use savedToken in API requests
+}
 ```
 </details>
 
@@ -427,6 +513,10 @@ func signin(email, password, turnstileToken string) (string, error) {
 <summary>Python</summary>
 
 ```python
+import requests
+import os
+from pathlib import Path
+
 def signin(email, password, turnstile_token):
     base_url = "http://localhost:8080"
     
@@ -446,13 +536,40 @@ def signin(email, password, turnstile_token):
     data = response.json()
     return data["token"], data["user"]
 
-# Usage
+def save_token(token):
+    """Save token to file"""
+    token_file = Path.home() / ".cafe_token"
+    token_file.write_text(token)
+    # Set file permissions to read/write for owner only
+    os.chmod(token_file, 0o600)
+
+def load_token():
+    """Load token from file"""
+    token_file = Path.home() / ".cafe_token"
+    if token_file.exists():
+        return token_file.read_text().strip()
+    return None
+
+# Usage: Sign in and store token
 token, user = signin(
     "user@example.com",
     "securepassword",
     "0.abcdefghijklmnopqrstuvwxyz..."
 )
-print(f"Token: {token}")
+
+# Save token for later use
+save_token(token)
+print(f"Token saved for user: {user['email']}")
+
+# Later, load token and use it
+saved_token = load_token()
+if saved_token:
+    # Use token in API calls
+    headers = {
+        "Authorization": f"Bearer {saved_token}",
+        "Content-Type": "application/json"
+    }
+    # ... make API calls with headers
 ```
 </details>
 
@@ -460,45 +577,130 @@ print(f"Token: {token}")
 <summary>Java</summary>
 
 ```java
-public String signin(String email, String password, String turnstileToken) 
-        throws Exception {
-    SigninRequest request = new SigninRequest(email, password, turnstileToken);
-    String jsonBody = gson.toJson(request);
-    
-    HttpRequest httpRequest = HttpRequest.newBuilder()
-        .uri(URI.create(BASE_URL + "/auth/signin"))
-        .header("Content-Type", "application/json")
-        .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-        .build();
-    
-    HttpResponse<String> response = httpClient.send(
-        httpRequest, 
-        HttpResponse.BodyHandlers.ofString()
-    );
-    
-    SigninResponse signinResponse = gson.fromJson(
-        response.body(), 
-        SigninResponse.class
-    );
-    
-    return signinResponse.token;
-}
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermissions;
 
-static class SigninRequest {
-    String email;
-    String password;
-    String turnstile_token;
+public class CafeClient {
+    private static final String BASE_URL = "http://localhost:8080";
+    private final HttpClient httpClient;
+    private final Gson gson;
+    private String token; // Store token in memory
     
-    SigninRequest(String email, String password, String turnstileToken) {
-        this.email = email;
-        this.password = password;
-        this.turnstile_token = turnstileToken;
+    public CafeClient() {
+        this.httpClient = HttpClient.newHttpClient();
+        this.gson = new Gson();
     }
-}
-
-static class SigninResponse {
-    String token;
-    User user;
+    
+    public String signin(String email, String password, String turnstileToken) 
+            throws Exception {
+        SigninRequest request = new SigninRequest(email, password, turnstileToken);
+        String jsonBody = gson.toJson(request);
+        
+        HttpRequest httpRequest = HttpRequest.newBuilder()
+            .uri(URI.create(BASE_URL + "/auth/signin"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+            .build();
+        
+        HttpResponse<String> response = httpClient.send(
+            httpRequest, 
+            HttpResponse.BodyHandlers.ofString()
+        );
+        
+        SigninResponse signinResponse = gson.fromJson(
+            response.body(), 
+            SigninResponse.class
+        );
+        
+        // Store token in memory
+        this.token = signinResponse.token;
+        
+        return this.token;
+    }
+    
+    // Save token to file
+    public void saveToken(String token) throws IOException {
+        Path tokenFile = Paths.get(System.getProperty("user.home"), ".cafe_token");
+        Files.write(tokenFile, token.getBytes());
+        
+        // Set file permissions (Unix-like systems)
+        try {
+            Files.setPosixFilePermissions(
+                tokenFile, 
+                PosixFilePermissions.fromString("rw-------")
+            );
+        } catch (UnsupportedOperationException e) {
+            // Windows doesn't support PosixFilePermissions
+        }
+    }
+    
+    // Load token from file
+    public String loadToken() throws IOException {
+        Path tokenFile = Paths.get(System.getProperty("user.home"), ".cafe_token");
+        if (Files.exists(tokenFile)) {
+            String token = new String(Files.readAllBytes(tokenFile));
+            this.token = token.trim();
+            return this.token;
+        }
+        return null;
+    }
+    
+    // Get stored token
+    public String getToken() {
+        return this.token;
+    }
+    
+    // Use token in API calls
+    public HttpRequest.Builder authenticatedRequest(String endpoint) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create(BASE_URL + endpoint))
+            .header("Authorization", "Bearer " + this.token);
+        
+        return builder;
+    }
+    
+    static class SigninRequest {
+        String email;
+        String password;
+        String turnstile_token;
+        
+        SigninRequest(String email, String password, String turnstileToken) {
+            this.email = email;
+            this.password = password;
+            this.turnstile_token = turnstileToken;
+        }
+    }
+    
+    static class SigninResponse {
+        String token;
+        User user;
+    }
+    
+    // Usage example
+    public static void main(String[] args) throws Exception {
+        CafeClient client = new CafeClient();
+        
+        // Sign in
+        String token = client.signin(
+            "user@example.com",
+            "securepassword",
+            "0.abcdefghijklmnopqrstuvwxyz..."
+        );
+        
+        // Save token
+        client.saveToken(token);
+        System.out.println("Token saved: " + token.substring(0, 20) + "...");
+        
+        // Later, load token
+        String loadedToken = client.loadToken();
+        if (loadedToken != null) {
+            System.out.println("Token loaded successfully");
+            // Use client.getToken() or client.authenticatedRequest() for API calls
+        }
+    }
 }
 ```
 </details>
@@ -507,6 +709,16 @@ static class SigninResponse {
 <summary>JavaScript (Node.js)</summary>
 
 ```javascript
+const axios = require('axios');
+const fs = require('fs').promises;
+const path = require('path');
+const os = require('os');
+
+const BASE_URL = 'http://localhost:8080';
+
+// Store token in memory
+let token = null;
+
 async function signin(email, password, turnstileToken) {
     try {
         const response = await axios.post(`${BASE_URL}/auth/signin`, {
@@ -519,6 +731,9 @@ async function signin(email, password, turnstileToken) {
             }
         });
         
+        // Store token in memory
+        token = response.data.token;
+        
         return {
             token: response.data.token,
             user: response.data.user
@@ -529,13 +744,53 @@ async function signin(email, password, turnstileToken) {
     }
 }
 
+// Save token to file
+async function saveToken(token) {
+    const tokenFile = path.join(os.homedir(), '.cafe_token');
+    await fs.writeFile(tokenFile, token, { mode: 0o600 });
+    console.log('Token saved to', tokenFile);
+}
+
+// Load token from file
+async function loadToken() {
+    const tokenFile = path.join(os.homedir(), '.cafe_token');
+    try {
+        const data = await fs.readFile(tokenFile, 'utf8');
+        token = data.trim();
+        return token;
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            return null;
+        }
+        throw error;
+    }
+}
+
+// Get stored token
+function getToken() {
+    return token;
+}
+
 // Usage
-const { token, user } = await signin(
-    'user@example.com',
-    'securepassword',
-    '0.abcdefghijklmnopqrstuvwxyz...'
-);
-console.log('Token:', token);
+(async () => {
+    // Sign in and store token
+    const { token: authToken, user } = await signin(
+        'user@example.com',
+        'securepassword',
+        '0.abcdefghijklmnopqrstuvwxyz...'
+    );
+    
+    // Save token to file
+    await saveToken(authToken);
+    console.log('Authenticated as:', user.email);
+    
+    // Later, load token from file
+    const loadedToken = await loadToken();
+    if (loadedToken) {
+        console.log('Token loaded from file');
+        // Use getToken() or loadedToken in API calls
+    }
+})();
 ```
 </details>
 
@@ -2058,7 +2313,3 @@ class CafeDiscoveryClient {
 - [CAFE User Guide](./02-cafe-user-guide.md) - Frontend usage guide
 - [Discovery README](../cafe-discovery/README.md) - Complete backend documentation
 - [CycloneDX CBOM Specification](https://cyclonedx.org/capabilities/cbom/) - CBOM format documentation
-
----
-
-*Last updated: 2025*
