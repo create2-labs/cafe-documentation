@@ -12,6 +12,10 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 - **[02-cafe-user-guide.md](./02-cafe-user-guide.md)** — Complete user guide for the CAFE frontend interface
 
+### Developer Guide
+
+- **[03-cafe-developer-guide.md](./03-cafe-developer-guide.md)** — Complete developer guide with API documentation and code examples in multiple languages (cURL, Go, Python, Java, JavaScript)
+
 ## About CAFE
 
 CAFE (Crypto-Agility Framework for Ethereum) is a three-service platform designed to discover, govern, and remediate cryptographic assets on Ethereum—ensuring compliance, resilience, and trust in the post-quantum and zero-knowledge era.
