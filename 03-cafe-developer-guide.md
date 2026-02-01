@@ -5,6 +5,9 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
 
 ## Document versionning
 
+- v0.2.0
+  - Date: Feb 1st, 2026
+  - Comments: Added anonymous token (GET /auth/anonymous) and anonymous scan result endpoints (GET /discovery/scans/anonymous, GET /discovery/tls/scans/anonymous).
 - v0.1.0
   - Date: Jan 21th, 2026
   - Author: Oleg Lodygensky
@@ -20,6 +23,7 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
    - [Authentication Endpoints](#authentication-endpoints)
    - [Scan Endpoints](#scan-endpoints)
    - [Result Retrieval Endpoints](#result-retrieval-endpoints)
+   - [Anonymous Result Endpoints](#anonymous-result-endpoints)
    - [Public Endpoints](#public-endpoints)
 5. [Error Handling](#error-handling)
 6. [Best Practices](#best-practices)
@@ -38,7 +42,12 @@ The CAFE Discovery API provides REST endpoints for scanning Ethereum wallets and
 
 ## Authentication
 
-Most endpoints require JWT authentication using hybrid PQC tokens (EdDSA + ML-DSA-65). Tokens are obtained through the `/auth/signin` endpoint and must be included in the `Authorization` header:
+Most endpoints require JWT authentication using hybrid PQC tokens (EdDSA + ML-DSA-65). Tokens are obtained through:
+
+- **Authenticated users**: `/auth/signin` (POST with email, password, Turnstile token)
+- **Anonymous users**: `/auth/anonymous` (GET, no body) — returns a short-lived token for viewing default endpoints and anonymous scan results; running new scans still requires sign-in
+
+Include the token in the `Authorization` header:
 
 ```
 Authorization: Bearer <your-jwt-token>
@@ -86,10 +95,24 @@ Register a new user account. Requires Cloudflare Turnstile verification.
 **Response:**
 ```json
 {
-  "message": "User registered successfully",
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWRjMmM1YjItYzE0ZS00Zjk4LThkNzgtODI0ZTQ5YjY5ODc5IiwiZW1haWwiOiJ1c2VyMUBleGFtcGxlLmNvbSIsImlzcyI6ImNhZmUtZGlzY292ZXJ5Iiwic3ViIjoiYWRjMmM1YjItYzE0ZS00Zjk4LThkNzgtODI0ZTQ5YjY5ODc5IiwiYXVkIjpbImNhZmUtZGlzY292ZXJ5Il0sImV4cCI6MTc2OTI5MjY0NSwibmJmIjoxNzY5MjA2MjQ1LCJpYXQiOjE3NjkyMDYyNDV9.6jAzgkAdM10tVceDLDOeSAr7-8KdiazgeBdgw_oxG5BTdqb__zH5H3yfRI4CcS0zLDF-ikZd3Z_eLhe64h_oCQ",
   "user": {
-    "id": "uuid",
-    "email": "user@example.com"
+    "id": "adc2c5b2-c14e-4f98-8d78-824e49b69879",
+    "email": "user@example.com",
+    "plan_id": "1000eebf-1aff-49f3-a928-7197d15233c2",
+    "plan": {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "name": "",
+      "type": "",
+      "wallet_scan_limit": 0,
+      "endpoint_scan_limit": 0,
+      "price": 0,
+      "is_active": false,
+      "created_at": "0001-01-01T00:00:00Z",
+      "updated_at": "0001-01-01T00:00:00Z"
+    },
+    "created_at": "2026-01-23T22:10:45.603665043Z",
+    "updated_at": "2026-01-23T22:10:45.603665043Z"
   }
 }
 ```
@@ -338,13 +361,26 @@ Sign in and receive a hybrid PQC JWT token. Requires Cloudflare Turnstile verifi
 **Response:**
 ```json
 {
-  "token": "eyJwYXlsb2FkIjoi...",
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMDcwM2Q5MGYtZmVhMi00YmI3LWE4ZmItZWRiN2E0ZTExMjI0IiwiZW1haWwiOiJ1c2VyQGV4YW1wbGUuY29tIiwiaXNzIjoiY2FmZS1kaXNjb3ZlcnkiLCJzdWIiOiIwNzAzZDkwZi1mZWEyLTRiYjctYThmYi1lZGI3YTRlMTEyMjQiLCJhdWQiOlsiY2FmZS1kaXNjb3ZlcnkiXSwiZXhwIjoxNzY5MjkyODAxLCJuYmYiOjE3NjkyMDY0MDEsImlhdCI6MTc2OTIwNjQwMX0.bs35_W2kSVqgnl_YjXSjKHjKhALNI2j3IeLxxe1WZDNQh_HDwTXj2YsvuZedWl27wVoBSFK36u_YW2K1s5SeBw",
   "user": {
-    "id": "uuid",
-    "email": "user@example.com"
+    "id": "0703d90f-fea2-4bb7-a8fb-edb7a4e11224",
+    "email": "user@example.com",
+    "plan_id": "1000eebf-1aff-49f3-a928-7197d15233c2",
+    "plan": {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "name": "",
+      "type": "",
+      "wallet_scan_limit": 0,
+      "endpoint_scan_limit": 0,
+      "price": 0,
+      "is_active": false,
+      "created_at": "0001-01-01T00:00:00Z",
+      "updated_at": "0001-01-01T00:00:00Z"
+    },
+    "created_at": "2026-01-23T22:10:31.470216Z",
+    "updated_at": "2026-01-23T22:10:31.470216Z"
   }
-}
-```
+}```
 
 **Examples:**
 
@@ -353,7 +389,7 @@ Sign in and receive a hybrid PQC JWT token. Requires Cloudflare Turnstile verifi
 
 ```bash
 # Sign in and save token to variable
-TOKEN=$(curl -s  -X POST http://localhost:8080/auth/signup \
+TOKEN=$(curl -s  -X POST http://localhost:8080/auth/signin \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
@@ -793,6 +829,18 @@ function getToken() {
 })();
 ```
 </details>
+
+#### GET /auth/anonymous
+
+Obtain a JWT token for anonymous (non-authenticated) use. No request body. The response has the same shape as signin: `token` and `user` (with `id` and `email` set to anonymous values). Use this token in the `Authorization` header to list anonymous scan results and view default endpoints. Running new scans still requires an authenticated user.
+
+**Response:** Same as signin (`token`, `user` with anonymous identity).
+
+**Example (cURL):**
+```bash
+curl -X GET "http://localhost:8080/auth/anonymous" | jq .
+# Use the returned token: curl -H "Authorization: Bearer <token>" "http://localhost:8080/discovery/scans/anonymous"
+```
 
 ### Scan Endpoints
 
@@ -1657,6 +1705,30 @@ const walletCBOM = await getCBOM(
 const tlsCBOM = await getCBOM(token, 'https://example.com');
 ```
 </details>
+
+### Anonymous Result Endpoints
+
+These endpoints return scan results for the current anonymous session (token from `GET /auth/anonymous`). They are also used by the frontend to merge anonymous results with authenticated results. Require a valid JWT in the `Authorization` header (anonymous or authenticated).
+
+#### GET /discovery/scans/anonymous
+
+Returns list of CBOMs for anonymous wallet scan results (Redis, TTL-limited). Includes default endpoints visible to everyone. Use the token from `GET /auth/anonymous`.
+
+**Example (cURL):**
+```bash
+TOKEN=$(curl -s -X GET "http://localhost:8080/auth/anonymous" | jq -r '.token')
+curl -X GET "http://localhost:8080/discovery/scans/anonymous" -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+#### GET /discovery/tls/scans/anonymous
+
+Returns list of CBOMs for anonymous TLS scan results (Redis, TTL-limited). Includes default endpoints visible to everyone. Use the token from `GET /auth/anonymous`.
+
+**Example (cURL):**
+```bash
+TOKEN=$(curl -s -X GET "http://localhost:8080/auth/anonymous" | jq -r '.token')
+curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" -H "Authorization: Bearer $TOKEN" | jq .
+```
 
 ### Public Endpoints
 

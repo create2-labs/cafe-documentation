@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.2.0
+  - Date: Feb 1st, 2026
+  - Comments: Navigation and routes updated for new interface (Discovery tabs, Platform); anonymous mode clarified (view-only without account, sign-in required to run scans).
 - v0.1.0
   - Date: Jan 19th, 2026
   - Author: Oleg Lodygensky
@@ -33,21 +36,26 @@ CAFE is accessible via a web browser.
 
 When you first visit CAFE, you can:
 
-- **Browse anonymously** — Access basic scanning features without creating an account; no data are saved.
-- **Create an account** — Sign up to save your scans and access advanced features; your scans are saved in the backend so that your retrieve them when you reconnect.
+- **Browse anonymously** — View default endpoints and scan results without creating an account; to run new scans you must sign in or sign up. Anonymous data are temporary and not persisted long-term.
+- **Create an account** — Sign up to run scans and save your results; your scans are stored in the backend so you can retrieve them when you reconnect.
 - **Sign in** — If you already have an account
 
 ### Navigation
 
 The main navigation menu provides access to:
 
-- **Dashboard** — Overview of your scans and security statistics
-- **Wallet Scans** — View and manage wallet security scans
-- **TLS Scans** — View and manage TLS endpoint security scans
-- **Chains** — View supported blockchain networks
-- **Wallets** — Manage your saved wallets (requires authentication)
-- **Security** — Check security information of the webapp itself.
+- **Home** — Landing page with links to Discovery, Crypto Policy Management, and Remediation
+- **Discovery** — Tabbed section with:
+  - **Introduction** — Overview of Discovery (wallet and TLS exposure)
+  - **Dashboard** — Overview of your scans and security statistics
+  - **Wallet scan** — View and manage wallet security scans
+  - **TLS scan** — View and manage TLS endpoint security scans
+- **Crypto Policy Management** — Govern crypto policies for wallet assets (CPM)
+- **Remediation** — Migration to post-quantum–resistant cryptography
+- **Platform** — Sub-pages: **Status** (health, versions), **Security** (token inspection, refresh)
+- **Networks (Chains)** — View supported blockchain networks
 - **Settings** — Manage your profile and view plan information
+- **Wallets** — Manage your saved wallets (requires authentication)
 
 ## Authentication
 
@@ -85,7 +93,7 @@ Your session will be cleared and you'll be redirected to the sign-in page.
 
 ## Dashboard
 
-The Dashboard provides an overview of your security scanning activity and statistics.
+The Discovery **Dashboard** (`/discovery/dashboard`) provides an overview of your security scanning activity and statistics.
 
 ### Overview Statistics
 
@@ -119,8 +127,8 @@ CAFE can scan Ethereum wallets to assess their quantum vulnerability by checking
 
 ### Starting a Wallet Scan
 
-1. Navigate to **Dashboard** or **Wallet Scans**
-2. Click the **"New Scan"** button
+1. Navigate to **Discovery → Dashboard** or **Discovery → Wallet scan**
+2. Click the **"New Scan"** button (sign-in required if you are in anonymous mode)
 3. In the scan modal:
    - Select **"Wallet Address"** as the scan type
    - Enter an Ethereum address (must start with `0x`)
@@ -180,8 +188,8 @@ CAFE can scan TLS endpoints (HTTPS URLs) to assess their post-quantum cryptograp
 
 ### Starting a TLS Scan
 
-1. Navigate to **Dashboard** or **TLS Scans**
-2. Click the **"New Scan"** button
+1. Navigate to **Discovery → Dashboard** or **Discovery → TLS scan**
+2. Click the **"New Scan"** button (sign-in required if you are in anonymous mode)
 3. In the scan modal:
    - Select **"TLS Endpoint"** as the scan type
    - Enter an HTTPS URL (must start with `https://`)
@@ -231,7 +239,7 @@ These results are visible to all users and continuously updated.
 
 ### Wallet Scans View
 
-The Wallet Scans page (`/scans`) displays all your wallet scan results.
+The Wallet Scans view is under **Discovery → Wallet scan** (`/discovery/wallet-scan`). It displays all your wallet scan results (and default or anonymous results when applicable).
 
 #### Features
 
@@ -264,7 +272,7 @@ Click on any scan result to view:
 
 ### TLS Scans View
 
-The TLS Scans page (`/tls-scans`) displays all your TLS endpoint scan results.
+The TLS Scans view is under **Discovery → TLS scan** (`/discovery/tls-scan`). It displays all your TLS endpoint scan results (and default or anonymous results when applicable).
 
 #### Features
 
@@ -299,7 +307,7 @@ Click on any scan result to view:
 
 ## Security Page
 
-The Security page (`/security`) provides information about your authentication tokens and security features.
+The Security page is under **Platform → Security** (`/platform/security`). It provides information about your authentication tokens and security features.
 
 ### Security Features Overview
 
@@ -340,7 +348,7 @@ To generate a new token:
 
 ## Settings and Plans
 
-The Settings page (`/settings`) provides access to your account information and plan details.
+The Settings page (`/settings`) provides access to your account information and plan details. In anonymous mode it shows limited plan/usage information.
 
 ### User Profile
 
@@ -376,7 +384,7 @@ Different plans have different limits:
 
 ## Wallet Management
 
-The Wallets page (`/wallets`) allows authenticated users to manage their saved wallets.
+The Wallets page (`/wallets`) allows authenticated users to manage their saved wallets. It is only visible when signed in.
 
 ### Adding a Wallet
 
@@ -429,40 +437,38 @@ CAFE supports anonymous usage for users who don't want to create an account.
 
 When using CAFE anonymously, you can:
 
-- **Scan wallets** — Perform wallet security scans
-- **Scan TLS endpoints** — Perform TLS endpoint scans
-- **View scan results** — See results for your scans
-- **Access default endpoints** — View pre-scanned default endpoints
+- **View scan results** — See default (pre-scanned) endpoints and any anonymous scan results tied to your session
+- **Browse Discovery** — Navigate Introduction, Dashboard, Wallet scan, and TLS scan views
+- **Token inspection** — Use Platform → Security to see anonymous token information
 
 ### Anonymous Limitations
 
-Anonymous users have:
-
-- **Temporary storage** — Scans are stored for 30 minutes only
-- **No saved history** — Scan history is not persisted
-- **Free plan limits** — Subject to free plan scan limits
-- **No wallet management** — Cannot save wallets for later
+- **Running new scans** — To run new wallet or TLS scans you must sign in or sign up; the interface will prompt you to create an account
+- **Temporary data** — Anonymous scan results are stored only for a limited time (e.g. 30 minutes) and are not persisted
+- **No wallet management** — Cannot save or manage wallets (Wallets page requires authentication)
+- **No saved history** — No long-term scan history
 
 ### Anonymous vs. Authenticated
 
 | Feature | Anonymous | Authenticated |
 |---------|-----------|---------------|
-| Wallet scanning | ✅ | ✅ |
-| TLS scanning | ✅ | ✅ |
-| Scan storage | 30 minutes | Permanent |
+| View default endpoints | ✅ | ✅ |
+| View anonymous/own scan results | ✅ (temporary) | ✅ |
+| Run new wallet/TLS scans | ❌ (sign-in required) | ✅ |
+| Scan storage | Temporary (e.g. 30 min) | Permanent |
 | Scan history | ❌ | ✅ |
 | Wallet management | ❌ | ✅ |
-| Plan limits | Free plan | Based on plan |
+| Plan limits | N/A | Based on plan |
 | Token inspection | ✅ | ✅ |
 
 ### Switching to Authenticated
 
-To save your scans and access advanced features:
+To run scans and save your results:
 
-1. Click **"Sign Up"** in the navigation
-2. Create an account
-3. Your anonymous scans will not be transferred (they expire after 30 minutes)
-4. Start scanning with your new account to build your scan history
+1. Click **"Sign In"** or **"Sign Up"** in the navigation (or when opening a new scan)
+2. Create an account or sign in
+3. Your previous anonymous scans will not be transferred (they expire)
+4. Run new scans with your account to build your scan history
 
 ## Tips and Best Practices
 
