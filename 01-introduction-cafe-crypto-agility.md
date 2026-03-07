@@ -2,6 +2,9 @@
 
 ## Document versionning
 
+- v0.2.0
+  - Date: Feb 26th, 2026
+  - Comments: Documentation review and consistency update.
 - v0.1.0
   - Date: Jan 19th, 2026
   - Author: Oleg Lodygensky

@@ -5,11 +5,17 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
 
 ## Document versionning
 
+- v0.4.0
+  - Date: Mar 7th, 2026
+  - Comments: Align with API: GET /discovery/scans and GET /discovery/tls/scans return list of scan IDs only; full CBOM via GET /discovery/cbom/*.
+- v0.3.0
+  - Date: Feb 26th, 2026
+  - Comments: Documentation review and version/date update.
 - v0.2.0
   - Date: Feb 1st, 2026
   - Comments: Added anonymous token (GET /auth/anonymous) and anonymous scan result endpoints (GET /discovery/scans/anonymous, GET /discovery/tls/scans/anonymous).
 - v0.1.0
-  - Date: Jan 21th, 2026
+  - Date: Jan 21st, 2026
   - Author: Oleg Lodygensky
   - Comments: initial version
 
@@ -36,7 +42,8 @@ The CAFE Discovery API provides REST endpoints for scanning Ethereum wallets and
 
 - **Unified Scan Endpoint**: Automatically detects wallet addresses vs TLS endpoints
 - **Asynchronous Processing**: Scans are queued and processed in the background
-- **CBOM Format**: All results are returned as Cryptographic Bill of Materials (CycloneDX v1.7)
+- **List-then-fetch**: `GET /discovery/scans` and `GET /discovery/tls/scans` return paginated lists of scan **IDs** (wallet address or URL); use `GET /discovery/cbom/{id}` to retrieve the full CBOM for each scan
+- **CBOM Format**: Full results are returned as Cryptographic Bill of Materials (CycloneDX v1.7) via the cbom endpoint
 - **Multi-Chain Support**: Scans wallets across multiple Ethereum-compatible chains
 - **Post-Quantum Analysis**: Evaluates NIST security levels and quantum readiness
 
@@ -55,12 +62,32 @@ Authorization: Bearer <your-jwt-token>
 
 **Note**: The JWT token is in JWS JSON General Serialization format (base64url-encoded). The frontend handles token parsing, but for API clients, treat it as an opaque string.
 
+### Turnstile token (`turnstile_token`)
+
+`/auth/signin` and `/auth/signup` require a **Cloudflare Turnstile** token to reduce bot abuse. The value you must send depends on the environment:
+
+- **Development / local** (backend with `TURNSTILE_SECRET_KEY` empty or set to the Cloudflare test secret): the backend accepts **any non-empty string**. For scripts and cURL you can use for example:
+  - `"turnstile_token": "dev"`
+  - or `"turnstile_token": "1x00000000000000000000AA"` (Cloudflare test site key value)
+- **Staging / production**: the token must be the **one-time token** returned by the Turnstile widget after the user completes the challenge. The frontend gets it from the widget and sends it in the request; for direct API calls you would need to either use the frontend once to obtain a JWT, or run a browser automation that completes the Turnstile challenge and reads the token.
+
+So in the examples below, replace `"0.abcdefghijklmnopqrstuvwxyz..."` by `"dev"` (or any non-empty string) when testing against a local/dev backend.
+
 ## Base URL and Configuration
 
 ### Base URLs
 
-- **Direct Backend**: `http://localhost:8080` (development)
-- **Via NGINX**: `https://localhost/api` (production/Docker)
+- **Development (direct backend)** — for local development, talk to the backend directly. No path prefix.
+  - Base URL: `http://localhost:8080`
+  - Example: `POST http://localhost:8080/auth/signin`, `POST http://localhost:8080/discovery/scan`
+- **Staging / Production (via NGINX)** — the API is exposed behind NGINX under the `/api` prefix. Use the full base URL including `/api`; e.g. `/api/discovery/scan` instead of `/discovery/scan`.
+  - For HTTPS with self-signed or custom CA, use `curl -k` when testing.
+
+| Context | Base URL | Auth signin | Discovery scan |
+|--------|----------|-------------|-----------------|
+| Local (developer) | `http://localhost:8080` | `http://localhost:8080/auth/signin` | `http://localhost:8080/discovery/scan` |
+| Staging (NGINX) | `https://cafe-staging.create2-labs.fr/api` | `https://cafe-staging.create2-labs.fr/api/auth/signin` | `https://cafe-staging.create2-labs.fr/api/discovery/scan` |
+| Production (NGINX) | `https://your-domain.com/api` | `https://your-domain.com/api/auth/signin` | `https://your-domain.com/api/discovery/scan` |
 
 ### Environment Variables
 
@@ -69,6 +96,9 @@ Set the base URL based on your deployment:
 ```bash
 # Development (direct backend)
 export CAFE_API_URL="http://localhost:8080"
+
+# Staging (via NGINX)
+export CAFE_API_URL="https://cafe-staging.create2-labs.fr/api"
 
 # Production (via NGINX)
 export CAFE_API_URL="https://your-domain.com/api"
@@ -394,7 +424,6 @@ TOKEN=$(curl -s  -X POST http://localhost:8080/auth/signin \
   -d '{
     "email": "user@example.com",
     "password": "securepassword",
-    "confirm_password": "securepassword",
     "turnstile_token": "0.abcdefghijklmnopqrstuvwxyz..."
   }'| jq -r '.token')
   
@@ -892,6 +921,7 @@ Unified scan endpoint that automatically detects whether the request is for a wa
 <summary>cURL</summary>
 
 ```bash
+# Local development (direct backend)
 # Scan a wallet address
 curl -X POST http://localhost:8080/discovery/scan \
   -H "Content-Type: application/json" \
@@ -907,6 +937,12 @@ curl -X POST http://localhost:8080/discovery/scan \
   -d '{
     "url": "https://example.com"
   }'
+
+# Staging / production (via NGINX): use base URL with /api prefix; -k if HTTPS cert is not trusted
+# curl -k -X POST https://cafe-staging.create2-labs.fr/api/discovery/scan \
+#   -H "Content-Type: application/json" \
+#   -H "Authorization: Bearer $TOKEN" \
+#   -d '{"url": "https://example.com"}'
 ```
 </details>
 
@@ -1173,7 +1209,7 @@ console.log(tlsResult);
 
 #### GET /discovery/scans
 
-Returns paginated list of CBOMs (Cryptographic Bill of Materials) for wallet scans for the authenticated user.
+Returns a paginated list of **scan IDs** (wallet addresses) for the authenticated user. Each result contains only `id` (the wallet address). To get the full CBOM for a given scan, use `GET /discovery/cbom/{address}`.
 
 **Query Parameters:**
 - `limit` (optional): Number of results per page (default: 20)
@@ -1183,26 +1219,7 @@ Returns paginated list of CBOMs (Cryptographic Bill of Materials) for wallet sca
 ```json
 {
   "results": [
-    {
-      "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
-      "type": "EOA",
-      "algorithm": "ECDSA-secp256k1",
-      "nist_level": 1,
-      "key_exposed": true,
-      "risk_score": 0.85,
-      "networks": ["ethereum-mainnet", "polygon"],
-      "scanned_at": "2025-01-15T10:30:00Z",
-      "cbom": {
-        "bomFormat": "CycloneDX",
-        "specVersion": "1.7",
-        "version": 1,
-        "metadata": {
-          "timestamp": "2025-01-15T10:30:00Z"
-        },
-        "type": "wallet",
-        "components": [...]
-      }
-    }
+    { "id": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e" }
   ],
   "total": 1,
   "limit": 20,
@@ -1232,23 +1249,11 @@ curl -k "https://localhost/api/discovery/scans?limit=10&offset=0" \
 
 ```go
 type WalletScansResponse struct {
-    Results []WalletScanResult `json:"results"`
-    Total   int                `json:"total"`
-    Limit   int                `json:"limit"`
-    Offset  int                `json:"offset"`
-    Count   int                `json:"count"`
-}
-
-type WalletScanResult struct {
-    Address     string    `json:"address"`
-    Type        string    `json:"type"`
-    Algorithm   string    `json:"algorithm"`
-    NISTLevel   int       `json:"nist_level"`
-    KeyExposed  bool      `json:"key_exposed"`
-    RiskScore   float64   `json:"risk_score"`
-    Networks    []string  `json:"networks"`
-    ScannedAt   string    `json:"scanned_at"`
-    CBOM        interface{} `json:"cbom"`
+    Results []struct{ ID string `json:"id"` } `json:"results"`
+    Total   int   `json:"total"`
+    Limit   int   `json:"limit"`
+    Offset  int   `json:"offset"`
+    Count   int   `json:"count"`
 }
 
 func listWalletScans(token string, limit, offset int) (*WalletScansResponse, error) {
@@ -1312,7 +1317,9 @@ def list_wallet_scans(token, limit=20, offset=0):
 scans = list_wallet_scans(token, limit=10, offset=0)
 print(f"Total scans: {scans['total']}")
 for scan in scans['results']:
-    print(f"Address: {scan['address']}, Risk: {scan['risk_score']}")
+    address = scan['id']
+    print(f"Wallet scan ID: {address}")
+    # To get full CBOM: get_cbom(token, address)
 ```
 </details>
 
@@ -1342,23 +1349,15 @@ public WalletScansResponse listWalletScans(String token, int limit, int offset)
 }
 
 static class WalletScansResponse {
-    List<WalletScanResult> results;
+    List<ScanIdResult> results;
     int total;
     int limit;
     int offset;
     int count;
 }
 
-static class WalletScanResult {
-    String address;
-    String type;
-    String algorithm;
-    int nist_level;
-    boolean key_exposed;
-    double risk_score;
-    List<String> networks;
-    String scanned_at;
-    Object cbom;
+static class ScanIdResult {
+    String id;  // wallet address
 }
 ```
 </details>
@@ -1390,18 +1389,32 @@ async function listWalletScans(token, limit = 20, offset = 0) {
 const scans = await listWalletScans(token, 10, 0);
 console.log(`Total scans: ${scans.total}`);
 scans.results.forEach(scan => {
-    console.log(`Address: ${scan.address}, Risk: ${scan.risk_score}`);
+    console.log(`Wallet scan ID: ${scan.id}`);
+    // To get full CBOM: getCBOM(token, scan.id)
 });
 ```
 </details>
 
 #### GET /discovery/tls/scans
 
-Returns paginated list of CBOMs for TLS endpoint scans for the authenticated user.
+Returns a paginated list of **scan IDs** (TLS endpoint URLs) for the authenticated user. Each result contains only `id` (the URL). To get the full CBOM for a given scan, use `GET /discovery/cbom/{url-encoded-url}`.
 
 **Query Parameters:**
 - `limit` (optional): Number of results per page (default: 20)
 - `offset` (optional): Number of results to skip (default: 0)
+
+**Response:**
+```json
+{
+  "results": [
+    { "id": "https://example.com" }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0,
+  "count": 1
+}
+```
 
 **Examples:**
 

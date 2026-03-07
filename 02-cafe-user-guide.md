@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.3.0
+  - Date: Feb 26th, 2026
+  - Comments: Documentation review and version/date update.
 - v0.2.0
   - Date: Feb 1st, 2026
   - Comments: Navigation and routes updated for new interface (Discovery tabs, Platform); anonymous mode clarified (view-only without account, sign-in required to run scans).
