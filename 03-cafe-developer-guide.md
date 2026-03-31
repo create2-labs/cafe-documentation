@@ -5,6 +5,9 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
 
 ## Document versionning
 
+- v0.5.0
+  - Date: Mar 25th, 2026
+  - Comments: Scanner split clarified: TLS and wallet scanners run from dedicated repositories (`cafe-scanner-tls`, `cafe-scanner-wallet`) and backend scan flow is unified on `POST /discovery/scan` (legacy `POST /discovery/tls/scan` removed).
 - v0.4.0
   - Date: Mar 7th, 2026
   - Comments: Align with API: GET /discovery/scans and GET /discovery/tls/scans return list of scan IDs only; full CBOM via GET /discovery/cbom/*.

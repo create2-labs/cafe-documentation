@@ -30,16 +30,12 @@ CAFE is composed of three main services:
 
 ## Additional Resources
 
-<<<<<<< HEAD
 - [CAFE Whitepaper](https://github.com/create2-labs/cafe-whitepaper)
-=======
-- [CAFE Whitepaper](../cafe-whitepaper/) — Complete technical documentation
 - [Discovery Repository](../cafe-discovery/) — Cryptographic discovery service
 - [Frontend Repository](../cafe-frontend/) — User interface
 - [Infrastructure Repository](../cafe-infra/) — Infrastructure and deployment
 - [Deploy Repository](../cafe-deploy/) — Deployment and operations
 - [CAFE Website](../cafe-website/) — Public website
->>>>>>> 56bc2c1 (fix: update after rearch)
 
 ## Contributing
 
