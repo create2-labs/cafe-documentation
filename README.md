@@ -35,6 +35,7 @@ CAFE is composed of three main services:
 - [Edge Repository](https://github.com/create2-labs/cafe-edge) — Reverse-proxy images with Post-Quantum Cryptography (PQC) 
 - [Discovery Repository](https://github.com/create2-labs/cafe-discovery) — Cryptographic discovery service
 - [TLS scanner Repository](https://github.com/create2-labs/cafe-scanner-tls) — TLS scanner service
+- Deploy Repository is not pulic for security reasons; but it does no magic and is easy to reproduce ;)
 
 ## Contributing
 
