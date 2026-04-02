@@ -32,9 +32,9 @@ CAFE is composed of three main services:
 
 - [CAFE Whitepaper](https://github.com/create2-labs/cafe-whitepaper) ; private : I have to clean it before make it plublic ;)
 - [Crypto backend Repository](https://github.com/create2-labs/cafe-crypto-backend) — Cryptographic backend; tooling for building and running applications with Post-Quantum Cryptography (PQC) support
-- [Edge Repository](https://github.com/create2-labs/cafe-edge) — Reverse-proxy images with Post-Quantum Cryptography (PQC) 
-- [Discovery Repository](https://github.com/create2-labs/cafe-discovery) — Cryptographic discovery service
-- [TLS scanner Repository](https://github.com/create2-labs/cafe-scanner-tls) — TLS scanner service
+- [Edge Repository](https://github.com/create2-labs/cafe-edge) — Reverse-proxy images with PQC
+- [Discovery Repository](https://github.com/create2-labs/cafe-discovery) — Cryptographic discovery service with PQC
+- [TLS scanner Repository](https://github.com/create2-labs/cafe-scanner-tls) — TLS scanner service with PQC
 - Deploy Repository is not pulic for security reasons; but it does no magic and is easy to reproduce ;)
 
 ## Contributing
