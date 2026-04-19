@@ -2,13 +2,16 @@
 
 ## Document versionning
 
-- v0.2.0
-  - Date: Feb 26th, 2026
-  - Comments: Documentation review and consistency update.
 - v0.1.0
   - Date: Jan 19th, 2026
   - Author: Oleg Lodygensky
   - Comments: initial version
+- v0.2.0
+  - Date: Feb 26th, 2026
+  - Comments: Documentation review and consistency update.
+- v0.3.0
+  - Date: Apr 19th, 2026
+  - Comments: Discovery → CPM normalized wallet observation contract referenced (v0.1); see developer guide and Discovery README.
 
 ## Introduction
 
@@ -201,6 +204,8 @@ Discovery generates standardized CBOM entries that provide a complete inventory 
 - NIST security levels
 - Hash functions used for entropy and signing
 - Presence or absence of PQC
+
+For **Crypto Policy Management (CPM)**, wallet state is additionally described by a **versioned export contract** (`discovery.wallet.observed` v0.1): normalized account kind, algorithms, numeric chain IDs, public-key exposure, and a PQ posture summary. Discovery retains CBOMs and internal persistence; CPM depends only on that contract, not on Discovery database layouts. Details: [Developer Guide — Discovery to CPM](./03-cafe-developer-guide.md#discovery-to-cpm-normalized-wallet-observation) and [Discovery README — Data structure](https://github.com/create2-labs/cafe-discovery/blob/main/README.md#data-structure-cpm-export-contract).
 
 ### Discovery: Future Work
 

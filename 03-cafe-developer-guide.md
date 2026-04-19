@@ -5,6 +5,9 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
 
 ## Document versionning
 
+- v0.6.0
+  - Date: Apr 19th, 2026
+  - Comments: Documented the **Discovery → CPM** normalized wallet observation contract (`discovery.wallet.observed` v0.1): envelope, payload fields, and exported vocabulary. Cross-references `cafe-discovery` README and the `cafe-cpm` module.
 - v0.5.0
   - Date: Mar 25th, 2026
   - Comments: Scanner split clarified: TLS and wallet scanners run from dedicated repositories (`cafe-scanner-tls`, `cafe-scanner-wallet`) and backend scan flow is unified on `POST /discovery/scan` (legacy `POST /discovery/tls/scan` removed).
@@ -34,8 +37,9 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
    - [Result Retrieval Endpoints](#result-retrieval-endpoints)
    - [Anonymous Result Endpoints](#anonymous-result-endpoints)
    - [Public Endpoints](#public-endpoints)
-5. [Error Handling](#error-handling)
-6. [Best Practices](#best-practices)
+5. [Discovery to CPM: normalized wallet observation](#discovery-to-cpm-normalized-wallet-observation)
+6. [Error Handling](#error-handling)
+7. [Best Practices](#best-practices)
 
 ## Introduction
 
@@ -2074,6 +2078,50 @@ async function getMetrics() {
 }
 ```
 </details>
+
+## Discovery to CPM: normalized wallet observation
+
+Today, integrators still use the **Discovery REST API** and **CBOM** payloads for wallet and TLS results. For **Crypto Policy Management (CPM)**, CAFE defines a separate, **typed, versioned** message contract so CPM never depends on Discovery database schemas or internal Go structs.
+
+### Roles
+
+- **Discovery** observes wallets, persists scan artifacts, and (in later PRs) **projects** observations to the export contract at the integration boundary.
+- **CPM** (`cafe-cpm`, module `github.com/create2-labs/cafe-cpm`) **owns** the normative contract and exported vocabulary. Implementations and fixtures live under `internal/domain/walletobserved` and `internal/domain/vocabulary`.
+
+### Contract identifier
+
+- **Event type:** `discovery.wallet.observed`
+- **Version:** `v0.1` (JSON field `event_version`)
+
+### Envelope (summary)
+
+| Field | Purpose |
+| --- | --- |
+| `event_id` | Stable id for idempotent consumption |
+| `event_type` / `event_version` | Contract routing |
+| `occurred_at` | When the event was emitted |
+| `correlation_id` / `causation_id` | Tracing back to scans or jobs |
+| `producer` | Wire-level label; v0.1 expects `cafe-discovery` |
+| `subject` | `{ "type": "wallet", "id": "..." }` |
+| `payload` | Normalized observation (below) |
+
+### Payload
+
+**Observed (policy-relevant):** `chain_ids` (numeric EVM chain IDs), `account_kind`, `current_algorithm`, `public_key_exposed`, `is_multichain`, `observed_at`.
+
+**Derived:** `current_pq_posture` — one of `classical_only`, `hybrid`, `full_pq`, `unknown` (Discovery derives this field on the export path; see `cafe-cpm` and Discovery README for semantics).
+
+### Exported vocabulary (first version)
+
+- **Account kinds:** `eoa`, `erc4337_smart_account`, `delegated_eoa_7702`, `contract_account`, `unknown`
+- **Algorithms:** `secp256k1_ecrecover`, `mldsa44`, `mldsa65`, `falcon512`, plus any `hybrid_*` profile string accepted by CPM validation
+- **Subject type:** `wallet` (only type in v0.1)
+
+### Canonical JSON and further reading
+
+- Example payload: `cafe-cpm` file `internal/domain/walletobserved/testdata/discovery_wallet_observed_v01.json`
+- [cafe-cpm README](https://github.com/create2-labs/cafe-cpm/blob/main/README.md) — contract tables and vocabulary aligned with this section
+- [cafe-discovery README — Data structure (CPM export contract)](https://github.com/create2-labs/cafe-discovery/blob/main/README.md#data-structure-cpm-export-contract) — producer-side summary for Discovery
 
 ## Error Handling
 

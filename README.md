@@ -1,6 +1,6 @@
 # CAFE Documentation
 
-This directory contains the official documentation for the CAFE (Crypto-Agility Framework for Ethereum) project. Last updated: February 2026.
+This directory contains the official documentation for the CAFE (Crypto-Agility Framework for Ethereum) project. Last updated: April 2026.
 
 ## Available Documents
 
@@ -14,7 +14,7 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Developer Guide
 
-- **[03-cafe-developer-guide.md](./03-cafe-developer-guide.md)** — Complete developer guide with API documentation (including anonymous token and anonymous scan endpoints) and code examples in multiple languages (cURL, Go, Python, Java, JavaScript)
+- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Complete developer guide with API documentation (including anonymous token and anonymous scan endpoints), code examples in multiple languages (cURL, Go, Python, Java, JavaScript), and the Discovery -> CPM normalized wallet observation contract (`discovery.wallet.observed` v0.1) for cross-service integration
 
 ## About CAFE
 
@@ -30,12 +30,16 @@ CAFE is composed of three main services:
 
 ## Additional Resources
 
-- [CAFE Whitepaper](https://github.com/create2-labs/cafe-whitepaper) ; private : I have to clean it before make it plublic ;)
+- [CAFE Whitepaper](https://github.com/create2-labs/cafe-whitepaper) — May be private while content is prepared for public release
+- [Discovery Repository](../cafe-discovery/) — Cryptographic discovery service with PQC (see README *Data structure (CPM export contract)* for the CPM-facing observation shape)
+- [Crypto Policy Management (`cafe-cpm`)](https://github.com/create2-labs/cafe-cpm) — Policy service; normative contract and vocabulary for Discovery exports
+- [Frontend Repository](../cafe-frontend/) — User interface
+- [Infrastructure Repository](../cafe-infra/) — Infrastructure and deployment
 - [Crypto backend Repository](https://github.com/create2-labs/cafe-crypto-backend) — Cryptographic backend; tooling for building and running applications with Post-Quantum Cryptography (PQC) support
 - [Edge Repository](https://github.com/create2-labs/cafe-edge) — Reverse-proxy images with PQC
-- [Discovery Repository](https://github.com/create2-labs/cafe-discovery) — Cryptographic discovery service with PQC
 - [TLS scanner Repository](https://github.com/create2-labs/cafe-scanner-tls) — TLS scanner service with PQC
-- Deploy Repository is not pulic for security reasons; but it does no magic and is easy to reproduce ;)
+- [CAFE Website](../cafe-website/) — Public website
+- Deploy repository is not public for security reasons; deployment is straightforward to reproduce without it
 
 ## Contributing
 
