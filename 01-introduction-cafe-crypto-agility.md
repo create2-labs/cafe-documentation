@@ -205,7 +205,7 @@ Discovery generates standardized CBOM entries that provide a complete inventory 
 - Hash functions used for entropy and signing
 - Presence or absence of PQC
 
-For **Crypto Policy Management (CPM)**, wallet state is additionally described by a **versioned export contract** (`discovery.wallet.observed` v0.1): normalized account kind, algorithms, numeric chain IDs, public-key exposure, and a PQ posture summary. Discovery retains CBOMs and internal persistence; CPM depends only on that contract, not on Discovery database layouts. Details: [Developer Guide — Discovery to CPM](./03-cafe-developer-guide.md#discovery-to-cpm-normalized-wallet-observation) and [Discovery README — Data structure](https://github.com/create2-labs/cafe-discovery/blob/main/README.md#data-structure-cpm-export-contract).
+For **Crypto Policy Management (CPM)**, wallet state is additionally described by a **versioned export contract** (`cafe.discovery.wallet.observed` v0.1): normalized account kind, algorithms, numeric chain IDs, public-key exposure, and a PQ posture summary. Discovery retains CBOMs and internal persistence; CPM depends only on that contract, not on Discovery database layouts. Details: [Developer Guide — Discovery to CPM](./03-cafe-developer-guide.md#discovery-to-cpm-normalized-wallet-observation) and [Discovery README — Data structure](https://github.com/create2-labs/cafe-discovery/blob/main/README.md#data-structure-cpm-export-contract).
 
 ### Discovery: Future Work
 
