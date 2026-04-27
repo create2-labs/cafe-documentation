@@ -7,7 +7,7 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
 
 - v0.6.0
   - Date: Apr 19th, 2026
-  - Comments: Documented the **Discovery → CPM** normalized wallet observation contract (`discovery.wallet.observed` v0.1): envelope, payload fields, and exported vocabulary. Cross-references `cafe-discovery` README and the `cafe-cpm` module.
+  - Comments: Documented the **Discovery → CPM** normalized wallet observation contract (`cafe.discovery.wallet.observed` v0.1): envelope, payload fields, and exported vocabulary. Cross-references `cafe-discovery` README and the `cafe-cpm` module.
 - v0.5.0
   - Date: Mar 25th, 2026
   - Comments: Scanner split clarified: TLS and wallet scanners run from dedicated repositories (`cafe-scanner-tls`, `cafe-scanner-wallet`) and backend scan flow is unified on `POST /discovery/scan` (legacy `POST /discovery/tls/scan` removed).
@@ -2090,7 +2090,7 @@ Today, integrators still use the **Discovery REST API** and **CBOM** payloads fo
 
 ### Contract identifier
 
-- **Event type:** `discovery.wallet.observed`
+- **Event type:** `cafe.discovery.wallet.observed`
 - **Version:** `v0.1` (JSON field `event_version`)
 
 ### Envelope (summary)
