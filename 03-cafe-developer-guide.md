@@ -39,11 +39,14 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
       2. [Contract identifier](#contract-identifier)
       3. [Envelope (summary)](#envelope-summary)
       4. [Payload](#payload)
-      5. [Trigger semantics (v0.7)](#trigger-semantics-v07)
-      6. [CPM read APIs (PR17)](#cpm-read-apis-pr17)
-      7. [Dev E2E stack execution](#dev-e2e-stack-execution)
-      8. [Exported vocabulary (first version)](#exported-vocabulary-first-version)
-      9. [Canonical JSON and further reading](#canonical-json-and-further-reading)
+      5. [Address casing contract (v0.8)](#address-casing-contract-v08)
+      6. [Health endpoint contract (v0.8)](#health-endpoint-contract-v08)
+      7. [Migration and compatibility policy](#migration-and-compatibility-policy)
+      8. [Trigger semantics (v0.7)](#trigger-semantics-v07)
+      9. [CPM read APIs (PR17)](#cpm-read-apis-pr17)
+      10. [Dev E2E stack execution](#dev-e2e-stack-execution)
+      11. [Exported vocabulary (first version)](#exported-vocabulary-first-version)
+      12. [Canonical JSON and further reading](#canonical-json-and-further-reading)
    7. [Error Handling](#error-handling)
    8. [Best Practices](#best-practices)
       1. [1. Token Management](#1-token-management)
@@ -61,6 +64,7 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
 
 - v0.7.0
   - Date: Apr 29th, 2026
+  - Comments: Define cross-service contract for wallet address casing and health endpoints. Canonical internal address format is lowercase; inputs accept any valid case; user-facing display may use EIP-55 checksum. Health contract now documents canonical endpoints and temporary compatibility policy.
   - Comments: Align repository naming to `cafe-crypto-policy-mgt`; clarify v0.7 explicit trigger semantics (`policy.assessment.requested.v0.1`) vs informational observation stream; document CPM read APIs and dev E2E stack script. Removed anonymous API references (`/auth/anonymous`, `/discovery/*/anonymous`) to 
 - v0.6.0
   - Date: Apr 19th, 2026
@@ -1811,7 +1815,7 @@ Crypto Policy Management (*CPM*) exposes read-only APIs for policy inspection an
 
 Base URLs:
 
-- Local (direct service): `http://localhost:8081`
+- Local (direct service): `http://localhost:8082`
 - Staging/production (behind gateway): `https://<domain>/api` (service routing dependent)
 
 #### GET /healthz (CPM)
@@ -1820,7 +1824,7 @@ Health check endpoint for CPM service runtime.
 
 Example:
 ```bash
-curl -X GET "http://localhost:8081/healthz"
+curl -X GET "http://localhost:8082/healthz"
 ```
 
 #### GET /api/v1/policies/catalog
@@ -1829,7 +1833,7 @@ Returns the loaded policy graph catalog.
 
 Example:
 ```bash
-curl -X GET "http://localhost:8081/api/v1/policies/catalog" | jq .
+curl -X GET "http://localhost:8082/api/v1/policies/catalog" | jq .
 ```
 
 #### GET /api/v1/policies/templates
@@ -1838,7 +1842,7 @@ Returns loaded policy templates.
 
 Example:
 ```bash
-curl -X GET "http://localhost:8081/api/v1/policies/templates" | jq .
+curl -X GET "http://localhost:8082/api/v1/policies/templates" | jq .
 ```
 
 #### GET /api/v1/policies/instances
@@ -1847,7 +1851,7 @@ Returns loaded policy instances (CPx).
 
 Example:
 ```bash
-curl -X GET "http://localhost:8081/api/v1/policies/instances" | jq .
+curl -X GET "http://localhost:8082/api/v1/policies/instances" | jq .
 ```
 
 #### POST /api/v1/policies/decisions/explore
@@ -2235,6 +2239,42 @@ Today, integrators still use the **Discovery REST API** and **CBOM** payloads fo
 **Observed (policy-relevant):** `chain_ids` (numeric EVM chain IDs), `account_kind`, `current_algorithm`, `public_key_exposed`, `is_multichain`, `observed_at`.
 
 **Derived:** `current_pq_posture` — one of `classical_only`, `hybrid`, `full_pq`, `unknown` (Discovery derives this field on the export path; see `cafe-crypto-policy-mgt` and Discovery README for semantics).
+
+### Address casing contract (v0.8)
+
+This section defines the normative address-casing behavior across Discovery, CPM, deploy tooling, and cross-service integrations.
+
+- **Input acceptance:** API and event consumers must accept any valid EVM hex address casing (`lowercase`, `UPPERCASE`, `EIP-55` mixed case).
+- **Canonical internal format:** Services must normalize to lowercase for:
+  - persistence keys,
+  - idempotency keys,
+  - cache keys,
+  - comparisons and deduplication.
+- **Comparisons:** Address equality must always use canonical normalized form.
+- **Output format contract:** machine-oriented API/event fields must return canonical lowercase unless an endpoint explicitly declares display formatting.
+- **User-facing display:** frontend/UI may render addresses in EIP-55 checksum format for readability and typo detection, but this must not be used as business key material.
+
+### Health endpoint contract (v0.8)
+
+This section defines canonical health endpoints and compatibility behavior.
+
+- **Discovery canonical health endpoint:** `GET /health`
+- **CPM canonical health endpoint:** `GET /healthz`
+- **Compatibility policy:** during migration windows, tooling (scripts/probes) may probe both canonical and legacy aliases; however, runbooks and dashboards must identify one canonical endpoint per service.
+- **Operational alignment:** compose healthchecks, blackbox probes, and E2E scripts must target canonical endpoints first and keep fallback checks explicitly temporary.
+
+### Migration and compatibility policy
+
+For rollout safety across repositories:
+
+1. **Do not break machine clients immediately.** Accept mixed-case inputs from existing clients.
+2. **Normalize at boundaries.** Apply lowercase canonicalization as soon as addresses cross API or event boundaries.
+3. **Document output behavior before enforcement.** If an endpoint transitions to canonical lowercase output, publish the change in release notes first.
+4. **Deprecate fallback health paths explicitly.** Keep a dated deprecation window, then remove temporary aliases and fallback checks.
+5. **Gate with contract tests.** Inter-service tests must verify:
+   - same behavior for lower/mixed-case address inputs,
+   - stable canonical comparisons,
+   - canonical health endpoint availability.
 
 ### Trigger semantics (v0.7)
 
