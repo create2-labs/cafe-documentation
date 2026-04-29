@@ -2,12 +2,58 @@
 
 This guide provides comprehensive documentation for integrating with the CAFE Discovery API. It includes code examples in multiple programming languages for all available endpoints.
 
+1. [CAFE Developer Guide](#cafe-developer-guide)
+   1. [Document versionning](#document-versionning)
+   2. [Table of Contents](#table-of-contents)
+   3. [Introduction](#introduction)
+      1. [Key Features](#key-features)
+   4. [Authentication](#authentication)
+      1. [Turnstile token (`turnstile_token`)](#turnstile-token-turnstile_token)
+   5. [Base URL and Configuration](#base-url-and-configuration)
+      1. [Base URLs](#base-urls)
+      2. [Environment Variables](#environment-variables)
+   6. [API Endpoints](#api-endpoints)
+      1. [Authentication Endpoints](#authentication-endpoints)
+         1. [POST /auth/signup](#post-authsignup)
+         2. [POST /auth/signin](#post-authsignin)
+      2. [Scan Endpoints](#scan-endpoints)
+         1. [POST /discovery/scan](#post-discoveryscan)
+      3. [Result Retrieval Endpoints](#result-retrieval-endpoints)
+         1. [GET /discovery/scans](#get-discoveryscans)
+         2. [GET /discovery/tls/scans](#get-discoverytlsscans)
+         3. [GET /discovery/cbom/\*](#get-discoverycbom)
+      4. [Public Endpoints](#public-endpoints)
+         1. [GET /discovery/rpcs](#get-discoveryrpcs)
+         2. [GET /health](#get-health)
+         3. [GET /metrics](#get-metrics)
+   7. [Discovery to CPM: normalized wallet observation](#discovery-to-cpm-normalized-wallet-observation)
+      1. [Roles](#roles)
+      2. [Contract identifier](#contract-identifier)
+      3. [Envelope (summary)](#envelope-summary)
+      4. [Payload](#payload)
+      5. [Trigger semantics (v0.7)](#trigger-semantics-v07)
+      6. [CPM read APIs (PR17)](#cpm-read-apis-pr17)
+      7. [Dev E2E stack execution](#dev-e2e-stack-execution)
+      8. [Exported vocabulary (first version)](#exported-vocabulary-first-version)
+      9. [Canonical JSON and further reading](#canonical-json-and-further-reading)
+   8. [Error Handling](#error-handling)
+   9. [Best Practices](#best-practices)
+      1. [1. Token Management](#1-token-management)
+      2. [2. Asynchronous Processing](#2-asynchronous-processing)
+      3. [3. Rate Limiting](#3-rate-limiting)
+      4. [4. Error Handling](#4-error-handling)
+      5. [5. CBOM Processing](#5-cbom-processing)
+      6. [6. URL Encoding](#6-url-encoding)
+      7. [7. Testing](#7-testing)
+   10. [Complete Example: Wallet Scan Workflow](#complete-example-wallet-scan-workflow)
+   11. [Additional Resources](#additional-resources)
+
 
 ## Document versionning
 
 - v0.7.0
   - Date: Apr 29th, 2026
-  - Comments: Align repository naming to `cafe-crypto-policy-mgt`; clarify v0.7 explicit trigger semantics (`policy.assessment.requested.v0.1`) vs informational observation stream; document CPM read APIs and dev E2E stack script.
+  - Comments: Align repository naming to `cafe-crypto-policy-mgt`; clarify v0.7 explicit trigger semantics (`policy.assessment.requested.v0.1`) vs informational observation stream; document CPM read APIs and dev E2E stack script. Removed anonymous API references (`/auth/anonymous`, `/discovery/*/anonymous`) to 
 - v0.6.0
   - Date: Apr 19th, 2026
   - Comments: Documented the **Discovery → CPM** normalized wallet observation contract (`cafe.discovery.wallet.observed` v0.1): envelope, payload fields, and exported vocabulary. Cross-references `cafe-discovery` README and the `cafe-crypto-policy-mgt` module.
@@ -20,9 +66,6 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
 - v0.3.0
   - Date: Feb 26th, 2026
   - Comments: Documentation review and version/date update.
-- v0.2.0
-  - Date: Feb 1st, 2026
-  - Comments: Added anonymous token (GET /auth/anonymous) and anonymous scan result endpoints (GET /discovery/scans/anonymous, GET /discovery/tls/scans/anonymous).
 - v0.1.0
   - Date: Jan 21st, 2026
   - Author: Oleg Lodygensky
@@ -38,7 +81,6 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
    - [Authentication Endpoints](#authentication-endpoints)
    - [Scan Endpoints](#scan-endpoints)
    - [Result Retrieval Endpoints](#result-retrieval-endpoints)
-   - [Anonymous Result Endpoints](#anonymous-result-endpoints)
    - [Public Endpoints](#public-endpoints)
 5. [Discovery to CPM: normalized wallet observation](#discovery-to-cpm-normalized-wallet-observation)
 6. [Error Handling](#error-handling)
@@ -62,7 +104,6 @@ The CAFE Discovery API provides REST endpoints for scanning Ethereum wallets and
 Most endpoints require JWT authentication using hybrid PQC tokens (EdDSA + ML-DSA-65). Tokens are obtained through:
 
 - **Authenticated users**: `/auth/signin` (POST with email, password, Turnstile token)
-- **Anonymous users**: `/auth/anonymous` (GET, no body) — returns a short-lived token for viewing default endpoints and anonymous scan results; running new scans still requires sign-in
 
 Include the token in the `Authorization` header:
 
@@ -868,18 +909,6 @@ function getToken() {
 })();
 ```
 </details>
-
-#### GET /auth/anonymous
-
-Obtain a JWT token for anonymous (non-authenticated) use. No request body. The response has the same shape as signin: `token` and `user` (with `id` and `email` set to anonymous values). Use this token in the `Authorization` header to list anonymous scan results and view default endpoints. Running new scans still requires an authenticated user.
-
-**Response:** Same as signin (`token`, `user` with anonymous identity).
-
-**Example (cURL):**
-```bash
-curl -X GET "http://localhost:8080/auth/anonymous" | jq .
-# Use the returned token: curl -H "Authorization: Bearer <token>" "http://localhost:8080/discovery/scans/anonymous"
-```
 
 ### Scan Endpoints
 
@@ -1728,30 +1757,6 @@ const walletCBOM = await getCBOM(
 const tlsCBOM = await getCBOM(token, 'https://example.com');
 ```
 </details>
-
-### Anonymous Result Endpoints
-
-These endpoints return scan results for the current anonymous session (token from `GET /auth/anonymous`). They are also used by the frontend to merge anonymous results with authenticated results. Require a valid JWT in the `Authorization` header (anonymous or authenticated).
-
-#### GET /discovery/scans/anonymous
-
-Returns list of CBOMs for anonymous wallet scan results (Redis, TTL-limited). Includes default endpoints visible to everyone. Use the token from `GET /auth/anonymous`.
-
-**Example (cURL):**
-```bash
-TOKEN=$(curl -s -X GET "http://localhost:8080/auth/anonymous" | jq -r '.token')
-curl -X GET "http://localhost:8080/discovery/scans/anonymous" -H "Authorization: Bearer $TOKEN" | jq .
-```
-
-#### GET /discovery/tls/scans/anonymous
-
-Returns list of CBOMs for anonymous TLS scan results (Redis, TTL-limited). Includes default endpoints visible to everyone. Use the token from `GET /auth/anonymous`.
-
-**Example (cURL):**
-```bash
-TOKEN=$(curl -s -X GET "http://localhost:8080/auth/anonymous" | jq -r '.token')
-curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" -H "Authorization: Bearer $TOKEN" | jq .
-```
 
 ### Public Endpoints
 

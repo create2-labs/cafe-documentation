@@ -10,11 +10,11 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### User Guide
 
-- **[02-cafe-user-guide.md](./02-cafe-user-guide.md)** — Complete user guide for the CAFE frontend: navigation (Discovery, Platform, CPM, Remediation), anonymous mode (view-only without account; sign-in to run scans), and all features
+- **[02-cafe-user-guide.md](./02-cafe-user-guide.md)** — Complete user guide for the CAFE frontend: navigation (Discovery, Platform, CPM, Remediation), account-based access, and all features
 
 ### Developer Guide
 
-- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Complete developer guide with API documentation (including anonymous token and anonymous scan endpoints), code examples in multiple languages (cURL, Go, Python, Java, JavaScript), and the Discovery -> CPM normalized wallet observation contract (`cafe.discovery.wallet.observed` v0.1) for cross-service integration
+- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Complete developer guide with API documentation, code examples in multiple languages (cURL, Go, Python, Java, JavaScript), and the Discovery -> CPM normalized wallet observation contract (`cafe.discovery.wallet.observed` v0.1) for cross-service integration
 
 ## About CAFE
 
