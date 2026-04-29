@@ -32,7 +32,7 @@ CAFE is composed of three main services:
 
 - [CAFE Whitepaper](https://github.com/create2-labs/cafe-whitepaper) — May be private while content is prepared for public release
 - [Discovery Repository](../cafe-discovery/) — Cryptographic discovery service with PQC (see README *Data structure (CPM export contract)* for the CPM-facing observation shape)
-- [Crypto Policy Management (`cafe-cpm`)](https://github.com/create2-labs/cafe-cpm) — Policy service; normative contract and vocabulary for Discovery exports
+- [Crypto Policy Management (`cafe-crypto-policy-mgt`)](https://github.com/create2-labs/cafe-crypto-policy-mgt) — Policy service; normative contract and vocabulary for Discovery exports
 - [Frontend Repository](../cafe-frontend/) — User interface
 - [Infrastructure Repository](../cafe-infra/) — Infrastructure and deployment
 - [Crypto backend Repository](https://github.com/create2-labs/cafe-crypto-backend) — Cryptographic backend; tooling for building and running applications with Post-Quantum Cryptography (PQC) support

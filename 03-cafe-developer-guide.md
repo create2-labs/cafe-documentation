@@ -5,9 +5,12 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
 
 ## Document versionning
 
+- v0.7.0
+  - Date: Apr 29th, 2026
+  - Comments: Align repository naming to `cafe-crypto-policy-mgt`; clarify v0.7 explicit trigger semantics (`policy.assessment.requested.v0.1`) vs informational observation stream; document CPM read APIs and dev E2E stack script.
 - v0.6.0
   - Date: Apr 19th, 2026
-  - Comments: Documented the **Discovery → CPM** normalized wallet observation contract (`cafe.discovery.wallet.observed` v0.1): envelope, payload fields, and exported vocabulary. Cross-references `cafe-discovery` README and the `cafe-cpm` module.
+  - Comments: Documented the **Discovery → CPM** normalized wallet observation contract (`cafe.discovery.wallet.observed` v0.1): envelope, payload fields, and exported vocabulary. Cross-references `cafe-discovery` README and the `cafe-crypto-policy-mgt` module.
 - v0.5.0
   - Date: Mar 25th, 2026
   - Comments: Scanner split clarified: TLS and wallet scanners run from dedicated repositories (`cafe-scanner-tls`, `cafe-scanner-wallet`) and backend scan flow is unified on `POST /discovery/scan` (legacy `POST /discovery/tls/scan` removed).
@@ -2086,7 +2089,7 @@ Today, integrators still use the **Discovery REST API** and **CBOM** payloads fo
 ### Roles
 
 - **Discovery** observes wallets, persists scan artifacts, and (in later PRs) **projects** observations to the export contract at the integration boundary.
-- **CPM** (`cafe-cpm`, module `github.com/create2-labs/cafe-cpm`) **owns** the normative contract and exported vocabulary. Implementations and fixtures live under `internal/domain/walletobserved` and `internal/domain/vocabulary`.
+- **CPM** (`cafe-crypto-policy-mgt`, module `github.com/create2-labs/cafe-crypto-policy-mgt`) **owns** the normative contract and exported vocabulary. Implementations and fixtures live under `internal/domain/walletobserved` and `internal/domain/vocabulary`.
 
 ### Contract identifier
 
@@ -2109,7 +2112,36 @@ Today, integrators still use the **Discovery REST API** and **CBOM** payloads fo
 
 **Observed (policy-relevant):** `chain_ids` (numeric EVM chain IDs), `account_kind`, `current_algorithm`, `public_key_exposed`, `is_multichain`, `observed_at`.
 
-**Derived:** `current_pq_posture` — one of `classical_only`, `hybrid`, `full_pq`, `unknown` (Discovery derives this field on the export path; see `cafe-cpm` and Discovery README for semantics).
+**Derived:** `current_pq_posture` — one of `classical_only`, `hybrid`, `full_pq`, `unknown` (Discovery derives this field on the export path; see `cafe-crypto-policy-mgt` and Discovery README for semantics).
+
+### Trigger semantics (v0.7)
+
+- `cafe.discovery.wallet.observed` (`v0.1`) on NATS remains **informational** and must not auto-start CPM assessment.
+- The canonical asynchronous trigger is explicit command publication: `policy.assessment.requested.v0.1`.
+- Discovery publishes this command from authenticated user action (`POST /discovery/assessments/request`), embedding observation snapshot + selection request.
+- CPM consumes `policy.assessment.requested.v0.1` with duplicate-safe behavior and no direct Discovery DB dependency.
+
+### CPM read APIs (PR17)
+
+CPM exposes read-only APIs for policy inspection and route exploration:
+
+- `GET /api/v1/policies/catalog`
+- `GET /api/v1/policies/templates`
+- `GET /api/v1/policies/instances`
+- `POST /api/v1/policies/decisions/explore`
+
+The decision endpoint preserves route status distinction:
+- `incompatible`
+- `compatible_but_not_deployable`
+- `compatible_and_deployable`
+
+### Dev E2E stack execution
+
+For dev environments started through `cafe-deploy`, use CPM stack E2E script:
+
+- `cafe-crypto-policy-mgt/scripts/e2e-dev-stack.sh`
+
+This script validates Discovery auth flow, scan queueing, CBOM readiness, explicit assessment request publication, and CPM API-level decision exploration.
 
 ### Exported vocabulary (first version)
 
@@ -2119,8 +2151,8 @@ Today, integrators still use the **Discovery REST API** and **CBOM** payloads fo
 
 ### Canonical JSON and further reading
 
-- Example payload: `cafe-cpm` file `internal/domain/walletobserved/testdata/discovery_wallet_observed_v01.json`
-- [cafe-cpm README](https://github.com/create2-labs/cafe-cpm/blob/main/README.md) — contract tables and vocabulary aligned with this section
+- Example payload: `cafe-crypto-policy-mgt` file `internal/domain/walletobserved/testdata/discovery_wallet_observed_v01.json`
+- [cafe-crypto-policy-mgt README](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — contract tables and vocabulary aligned with this section
 - [cafe-discovery README — Data structure (CPM export contract)](https://github.com/create2-labs/cafe-discovery/blob/main/README.md#data-structure-cpm-export-contract) — producer-side summary for Discovery
 
 ## Error Handling
