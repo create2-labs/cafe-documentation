@@ -4,29 +4,37 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
 
 1. [CAFE Developer Guide](#cafe-developer-guide)
    1. [Document versionning](#document-versionning)
-   2. [Table of Contents](#table-of-contents)
-   3. [Introduction](#introduction)
+   2. [Introduction](#introduction)
       1. [Key Features](#key-features)
-   4. [Authentication](#authentication)
+   3. [Authentication](#authentication)
       1. [Turnstile token (`turnstile_token`)](#turnstile-token-turnstile_token)
-   5. [Base URL and Configuration](#base-url-and-configuration)
+   4. [Base URL and Configuration](#base-url-and-configuration)
       1. [Base URLs](#base-urls)
       2. [Environment Variables](#environment-variables)
-   6. [API Endpoints](#api-endpoints)
+   5. [API Endpoints](#api-endpoints)
       1. [Authentication Endpoints](#authentication-endpoints)
          1. [POST /auth/signup](#post-authsignup)
          2. [POST /auth/signin](#post-authsignin)
-      2. [Scan Endpoints](#scan-endpoints)
-         1. [POST /discovery/scan](#post-discoveryscan)
-      3. [Result Retrieval Endpoints](#result-retrieval-endpoints)
-         1. [GET /discovery/scans](#get-discoveryscans)
-         2. [GET /discovery/tls/scans](#get-discoverytlsscans)
-         3. [GET /discovery/cbom/\*](#get-discoverycbom)
-      4. [Public Endpoints](#public-endpoints)
-         1. [GET /discovery/rpcs](#get-discoveryrpcs)
-         2. [GET /health](#get-health)
-         3. [GET /metrics](#get-metrics)
-   7. [Discovery to CPM: normalized wallet observation](#discovery-to-cpm-normalized-wallet-observation)
+      2. [Discovery](#discovery)
+         1. [Scan Endpoints](#scan-endpoints)
+         2. [POST /discovery/scan](#post-discoveryscan)
+         3. [Result Retrieval Endpoints](#result-retrieval-endpoints)
+         4. [GET /discovery/scans](#get-discoveryscans)
+         5. [GET /discovery/tls/scans](#get-discoverytlsscans)
+         6. [GET /discovery/cbom/\*](#get-discoverycbom)
+         7. [Public Endpoints](#public-endpoints)
+         8. [GET /discovery/rpcs](#get-discoveryrpcs)
+         9. [GET /health](#get-health)
+         10. [GET /metrics](#get-metrics)
+      3. [Crypto Policy Management endpoints](#crypto-policy-management-endpoints)
+         1. [GET /healthz (CPM)](#get-healthz-cpm)
+         2. [GET /api/v1/policies/catalog](#get-apiv1policiescatalog)
+         3. [GET /api/v1/policies/templates](#get-apiv1policiestemplates)
+         4. [GET /api/v1/policies/instances](#get-apiv1policiesinstances)
+         5. [POST /api/v1/policies/decisions/explore](#post-apiv1policiesdecisionsexplore)
+         6. [Detailed examples: GET /health (Discovery)](#detailed-examples-get-health-discovery)
+         7. [Detailed examples: GET /metrics (Discovery)](#detailed-examples-get-metrics-discovery)
+   6. [Discovery to CPM: normalized wallet observation](#discovery-to-cpm-normalized-wallet-observation)
       1. [Roles](#roles)
       2. [Contract identifier](#contract-identifier)
       3. [Envelope (summary)](#envelope-summary)
@@ -36,8 +44,8 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
       7. [Dev E2E stack execution](#dev-e2e-stack-execution)
       8. [Exported vocabulary (first version)](#exported-vocabulary-first-version)
       9. [Canonical JSON and further reading](#canonical-json-and-further-reading)
-   8. [Error Handling](#error-handling)
-   9. [Best Practices](#best-practices)
+   7. [Error Handling](#error-handling)
+   8. [Best Practices](#best-practices)
       1. [1. Token Management](#1-token-management)
       2. [2. Asynchronous Processing](#2-asynchronous-processing)
       3. [3. Rate Limiting](#3-rate-limiting)
@@ -45,8 +53,8 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
       5. [5. CBOM Processing](#5-cbom-processing)
       6. [6. URL Encoding](#6-url-encoding)
       7. [7. Testing](#7-testing)
-   10. [Complete Example: Wallet Scan Workflow](#complete-example-wallet-scan-workflow)
-   11. [Additional Resources](#additional-resources)
+   9. [Complete Example: Wallet Scan Workflow](#complete-example-wallet-scan-workflow)
+   10. [Additional Resources](#additional-resources)
 
 
 ## Document versionning
@@ -71,20 +79,6 @@ This guide provides comprehensive documentation for integrating with the CAFE Di
   - Author: Oleg Lodygensky
   - Comments: initial version
 
-
-## Table of Contents
-
-1. [Introduction](#introduction)
-2. [Authentication](#authentication)
-3. [Base URL and Configuration](#base-url-and-configuration)
-4. [API Endpoints](#api-endpoints)
-   - [Authentication Endpoints](#authentication-endpoints)
-   - [Scan Endpoints](#scan-endpoints)
-   - [Result Retrieval Endpoints](#result-retrieval-endpoints)
-   - [Public Endpoints](#public-endpoints)
-5. [Discovery to CPM: normalized wallet observation](#discovery-to-cpm-normalized-wallet-observation)
-6. [Error Handling](#error-handling)
-7. [Best Practices](#best-practices)
 
 ## Introduction
 
@@ -910,7 +904,9 @@ function getToken() {
 ```
 </details>
 
-### Scan Endpoints
+### Discovery
+
+#### Scan Endpoints
 
 #### POST /discovery/scan
 
@@ -1244,7 +1240,7 @@ console.log(tlsResult);
 ```
 </details>
 
-### Result Retrieval Endpoints
+#### Result Retrieval Endpoints
 
 #### GET /discovery/scans
 
@@ -1758,7 +1754,7 @@ const tlsCBOM = await getCBOM(token, 'https://example.com');
 ```
 </details>
 
-### Public Endpoints
+#### Public Endpoints
 
 #### GET /discovery/rpcs
 
@@ -1790,6 +1786,127 @@ Returns the list of configured RPC endpoints. No authentication required.
 curl http://localhost:8080/discovery/rpcs | jq .
 ```
 </details>
+
+#### GET /health
+
+Health check endpoint for the Discovery service. No authentication required.
+
+Example:
+```bash
+curl http://localhost:8080/health | jq .
+```
+
+#### GET /metrics
+
+Prometheus metrics endpoint for the Discovery service. No authentication required.
+
+Example:
+```bash
+curl http://localhost:8080/metrics
+```
+
+### Crypto Policy Management endpoints
+
+Crypto Policy Management (*CPM*) exposes read-only APIs for policy inspection and route exploration.
+
+Base URLs:
+
+- Local (direct service): `http://localhost:8081`
+- Staging/production (behind gateway): `https://<domain>/api` (service routing dependent)
+
+#### GET /healthz (CPM)
+
+Health check endpoint for CPM service runtime.
+
+Example:
+```bash
+curl -X GET "http://localhost:8081/healthz"
+```
+
+#### GET /api/v1/policies/catalog
+
+Returns the loaded policy graph catalog.
+
+Example:
+```bash
+curl -X GET "http://localhost:8081/api/v1/policies/catalog" | jq .
+```
+
+#### GET /api/v1/policies/templates
+
+Returns loaded policy templates.
+
+Example:
+```bash
+curl -X GET "http://localhost:8081/api/v1/policies/templates" | jq .
+```
+
+#### GET /api/v1/policies/instances
+
+Returns loaded policy instances (CPx).
+
+Example:
+```bash
+curl -X GET "http://localhost:8081/api/v1/policies/instances" | jq .
+```
+
+#### POST /api/v1/policies/decisions/explore
+
+Evaluates an observation and selection request against loaded CPx candidates and returns `PolicyDecision`.
+
+Request body:
+```json
+{
+  "observation": {
+    "chain_ids": [1, 8453],
+    "account_kind": "eoa",
+    "current_algorithm": "secp256k1_ecrecover",
+    "current_pq_posture": "classical_only",
+    "public_key_exposed": true,
+    "is_multichain": true,
+    "observed_at": "2026-04-17T09:59:58Z"
+  },
+  "selection_request": {
+    "target_posture": "hybrid",
+    "target_chain_ids": [1, 8453],
+    "require_multichain": true,
+    "allow_new_wallet": false,
+    "address_continuity_required": true,
+    "key_rotation_required": true,
+    "recovery_required": true,
+    "minimum_maturity": 1,
+    "approval_mode": "manual"
+  }
+}
+```
+
+Example:
+```bash
+curl -X POST "http://localhost:8081/api/v1/policies/decisions/explore" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "observation": {
+      "chain_ids": [1, 8453],
+      "account_kind": "eoa",
+      "current_algorithm": "secp256k1_ecrecover",
+      "current_pq_posture": "classical_only",
+      "public_key_exposed": true,
+      "is_multichain": true,
+      "observed_at": "2026-04-17T09:59:58Z"
+    },
+    "selection_request": {
+      "target_posture": "hybrid",
+      "target_chain_ids": [1, 8453],
+      "require_multichain": true,
+      "allow_new_wallet": false,
+      "address_continuity_required": true,
+      "key_rotation_required": true,
+      "recovery_required": true,
+      "minimum_maturity": 1,
+      "approval_mode": "manual"
+    }
+  }' | jq .
+```
 
 <details>
 <summary>Go</summary>
@@ -1883,7 +2000,7 @@ async function getRPCs() {
 ```
 </details>
 
-#### GET /health
+#### Detailed examples: GET /health (Discovery)
 
 Health check endpoint. No authentication required.
 
@@ -1995,7 +2112,7 @@ async function checkHealth() {
 ```
 </details>
 
-#### GET /metrics
+#### Detailed examples: GET /metrics (Discovery)
 
 Prometheus metrics endpoint. Exposes metrics in Prometheus format for scraping. No authentication required.
 
