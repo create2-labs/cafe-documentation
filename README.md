@@ -16,6 +16,13 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 - [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Complete developer guide with API documentation, code examples in multiple languages (cURL, Go, Python, Java, JavaScript), and the Discovery -> CPM normalized wallet observation contract (`cafe.discovery.wallet.observed` v0.1) for cross-service integration
 
+### Security and Operations
+
+- [CPM Auth-Only Contract and Runbook](./docs/security/cpm-auth-only-contract.md)
+  — Authenticated-only CPM behavior, scan authorization, owner-scoped
+  persistence, error contract, deploy expectations, and operational
+  troubleshooting
+
 ## About CAFE
 
 CAFE (Crypto-Agility Framework for Ethereum) is a three-service platform designed to discover, govern, and remediate cryptographic assets on Ethereum—ensuring compliance, resilience, and trust in the post-quantum and zero-knowledge era.
