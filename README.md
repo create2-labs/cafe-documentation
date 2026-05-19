@@ -1,6 +1,6 @@
 # CAFE Documentation
 
-This directory contains the official documentation for the CAFE (Crypto-Agility Framework for Ethereum) project. Last updated: April 2026.
+This directory contains the official documentation for the CAFE (Crypto-Agility Framework for Ethereum) project. Last updated: May 2026.
 
 ## Available Documents
 
@@ -14,14 +14,19 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Developer Guide
 
-- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Complete developer guide with API documentation, code examples in multiple languages (cURL, Go, Python, Java, JavaScript), and the Discovery -> CPM normalized wallet observation contract (`cafe.discovery.wallet.observed` v0.1) for cross-service integration
+- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including scan `scan_id` correlation, CPM-owned policy assessment, removed route migration notes, and QA sign-off checks.
+
+### API QA
+
+- [API v1 QA Checklist](./docs/api/api-v1-qa-checklist.md) — Compact reviewer checklist for route names, removed paths, assessment ownership, delete semantics, and cross-repository follow-up.
 
 ### Security and Operations
 
 - [CPM Auth-Only Contract and Runbook](./docs/security/cpm-auth-only-contract.md)
   — Authenticated-only CPM behavior, scan authorization, owner-scoped
-  persistence, error contract, deploy expectations, and operational
-  troubleshooting
+  persistence, wallet-only assessment request behavior, internal
+  service-token expectations, error contract, deploy expectations, and
+  operational troubleshooting
 
 ## About CAFE
 
