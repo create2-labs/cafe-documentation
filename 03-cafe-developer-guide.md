@@ -203,6 +203,38 @@ curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
 
 When `scan_id` is supplied, CPM may authorize scan visibility against Discovery, but the explore endpoint still consumes the provided observation. It does not fetch authoritative scan detail as a substitute for `observation`.
 
+#### Option A: explore with Discovery v1 `policy_context`
+
+**Option A** (post-V1 CPM) means policy workflows run against **real user-owned wallet scans** exposed by the authenticated Discovery backend—see [CPM `workplans/CPM_post_v_1_option_a_scan_context.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md). The v1 implementation uses list/detail under `/discovery/v1/wallets/scans` and CPM explore with client-built **`policy_context`** from scan detail (distinct from async assessment, which forbids `policy_context`).
+
+Production UI and integrators on **Option A** load wallet scan **detail** from `GET /discovery/v1/wallets/scans/{scan_id}` (edge: `/api/discovery/v1/...`) and send that shape as **`policy_context`** on explore, plus top-level **`scan_id`** and **`selection_request`**. Field mapping is normative in [Discovery `CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md`](https://github.com/create2-labs/cafe-discovery/blob/main/docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) §3.1; the integrated story is in [CPM `CPM_OPTION_A_INTEGRATED.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CPM_OPTION_A_INTEGRATED.md) and [Option A architecture](./docs/architecture/cpm-option-a-v1-flow.md).
+
+```bash
+DETAIL=$(curl -s "${DISCOVERY_BASE}/discovery/v1/wallets/scans/${SCAN_ID}" \
+  -H "Authorization: Bearer ${JWT}")
+curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
+  -H "Authorization: Bearer ${JWT}" \
+  -H "Content-Type: application/json" \
+  -d "$(jq -n \
+    --arg sid "${SCAN_ID}" \
+    --argjson ctx "${DETAIL}" \
+    '{
+      scan_id: $sid,
+      policy_context: $ctx,
+      selection_request: {
+        target_posture: "hybrid",
+        target_chain_ids: [1],
+        require_multichain: false,
+        allow_new_wallet: false,
+        address_continuity_required: true,
+        key_rotation_required: true,
+        recovery_required: true,
+        minimum_maturity: 1,
+        approval_mode: "manual"
+      }
+    }')" | jq .
+```
+
 ### Request async policy assessment
 
 `POST /api/cpm/v1/policies/assessment/request` is the canonical HTTP trigger for `policy.assessment.requested.v0.1`. It replaces the removed Discovery route `POST /discovery/assessments/request`.
@@ -261,6 +293,7 @@ Do not use these paths in new code, scripts, docs, or QA runbooks:
 | `GET /discovery/rpcs` | `GET /discovery/v1/rpcs` |
 | `GET /discovery/scanners` | `GET /discovery/v1/scanners` |
 | `POST /discovery/assessments/request` | `POST /api/cpm/v1/policies/assessment/request` |
+| `GET /discovery/wallet-policy-contexts` (removed) | `GET /discovery/v1/wallets/scans` + `GET …/wallets/scans/{scan_id}` |
 | `/api/v1/cpm/...` | `/api/cpm/v1/...` |
 | `/api/wallets` | `/api/discovery/v1/wallets` |
 
@@ -277,6 +310,7 @@ Use this checklist before opening or merging API coherency documentation changes
 - Wallet and TLS detail examples fetch `.../scans/{scan_id}` and read `result`.
 - No primary workflow tells users to call `GET /discovery/cbom/*`.
 - No primary workflow tells users to call `POST /discovery/assessments/request`.
+- No primary workflow tells users to call `GET /discovery/wallet-policy-contexts` (historical only).
 - Policy assessment docs say CPM-owned, wallet-scan only, `202` on acceptance, `policy_context` rejected, TLS scan IDs rejected.
 - Delete scan docs mention CPM reference verification, `409 SCAN_REFERENCED_BY_POLICY`, and `503 POLICY_REFERENCE_CHECK_UNAVAILABLE`.
 - Edge docs preserve `/api/internal/*` as not exposed.
