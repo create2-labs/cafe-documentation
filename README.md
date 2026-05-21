@@ -16,6 +16,10 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 - [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including scan `scan_id` correlation, CPM-owned policy assessment, removed route migration notes, and QA sign-off checks.
 
+### Architecture
+
+- [CPM Option A — Discovery v1 to policy flow](./docs/architecture/cpm-option-a-v1-flow.md) — What Option A is (post-V1 real scan context via Discovery); scan → list/detail → explore → persist; links to [CPM design workplan](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md) and maintainer contracts.
+
 ### API QA
 
 - [API v1 QA Checklist](./docs/api/api-v1-qa-checklist.md) — Compact reviewer checklist for route names, removed paths, assessment ownership, delete semantics, and cross-repository follow-up.
