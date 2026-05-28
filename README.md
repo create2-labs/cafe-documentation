@@ -4,6 +4,13 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ## Available Documents
 
+### Specifications (English)
+
+- **[functional-specifications.md](./functional-specifications.md)** — CAFE product behavior: Discovery scans, CPM policies, governance rules (W1–W8), workflows, and compliance overview
+- **[technical-specifications.md](./technical-specifications.md)** — CAFE technical architecture: services, APIs, persistence, messaging, deployment, and testing
+
+> **Note:** [specs-fonctionnelles.md](./specs-fonctionnelles.md) is a deprecated stub. It previously held a legacy *Ponybook* document; use the English specifications above.
+
 ### Introduction
 
 - **[01-introduction-cafe-crypto-agility.md](./01-introduction-cafe-crypto-agility.md)** — Introduction to CAFE and the crypto-agility problem for the Ethereum blockchain
@@ -14,11 +21,11 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Developer Guide
 
-- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including scan `scan_id` correlation, CPM-owned policy assessment, removed route migration notes, and QA sign-off checks.
+- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including scan `scan_id` correlation, CPM-owned policy assessment, and QA sign-off checks.
 
 ### Architecture
 
-- [CPM Option A — Discovery v1 to policy flow](./docs/architecture/cpm-option-a-v1-flow.md) — What Option A is (post-V1 real scan context via Discovery); scan → list/detail → explore → persist; links to [CPM design workplan](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md) and maintainer contracts.
+- [CPM — Discovery v1 to policy flow](./docs/architecture/cpm-v1-flow.md) — What Option A is (post-V1 real scan context via Discovery); scan → list/detail → explore → persist; links to [CPM design workplan](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md) and maintainer contracts.
 
 ### API QA
 

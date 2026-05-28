@@ -19,7 +19,7 @@ Use this checklist when reviewing API coherency docs, runbooks, scripts, and rel
 - TLS scan lists use `GET /discovery/v1/tls/scans`.
 - TLS defaults use `GET /discovery/v1/tls/scans/defaults`.
 - Scan detail is fetched by `scan_id` through `GET .../wallets/scans/{scan_id}` or `GET .../tls/scans/{scan_id}`.
-- Detail consumers read the v1 `result` object, not the removed CBOM HTTP route.
+- Detail consumers read the v1 `result` object; CBOM uses `GET /discovery/v1/wallets/scans/{scan_id}/cbom` when needed.
 - Public utilities use `GET /discovery/v1/rpcs` and `GET /discovery/v1/scanners`.
 
 ## CPM Checks
@@ -31,22 +31,6 @@ Use this checklist when reviewing API coherency docs, runbooks, scripts, and rel
 - Assessment request rejects client `policy_context`.
 - Unknown, unauthorized, TLS, or non-wallet `scan_id` values return `404` on assessment request.
 - Discovery lookup outages return `503` and must not emit `policy.assessment.requested.v0.1`.
-
-## Removed Path Checks
-
-Primary docs must not instruct users to call:
-
-- `POST /discovery/scan`
-- `GET /discovery/scans`
-- `GET /discovery/tls/scans`
-- `GET /discovery/cbom/*`
-- `GET /discovery/rpcs`
-- `GET /discovery/scanners`
-- `POST /discovery/assessments/request`
-- `/api/v1/cpm/...`
-- `/api/wallets`
-
-Historical notes may mention these paths only when they are clearly labeled as removed, deprecated, or follow-up debt.
 
 ## Delete and Operations Checks
 

@@ -1,4 +1,5 @@
-# CPM Option A — Discovery v1 scan to policy flow
+
+# CPM — Discovery v1 scan to policy flow
 
 **What is Option A?** Option A is the **post-V1 CPM integration path**: after the CPM frontend V1 policy workflow shipped, the product connects that page to **real user-owned wallet scans** via the **authenticated Discovery backend** (scan data is persisted behind Discovery today; Persistence Service remains the long-term owner). The UI selects a **`scan_id`**, loads v1 scan detail, and drives CPM explore/persist—**not** mock placeholders or direct DB access. A future **Option B** would expose scan context through an extracted Persistence Service API; Option A is the short-term path that respects current AuthN/AuthZ in Discovery. Full product intent, constraints, and data-flow rationale: [CPM `workplans/CPM_post_v_1_option_a_scan_context.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md).
 
@@ -31,10 +32,6 @@ sequenceDiagram
 | `POST /api/cpm/v1/policies/assessment/request` | **Forbidden** | Async pipeline; CPM loads detail server-side |
 
 Do not send `policy_context` to the assessment endpoint. See [CPM auth runbook](../security/cpm-auth-only-contract.md) troubleshooting for **400** / **404** on assessment.
-
-## Removed route (historical)
-
-`GET /discovery/wallet-policy-contexts` was removed in favor of v1 wallet scans ([Discovery PR11a](https://github.com/create2-labs/cafe-discovery/pull/54)). New docs and scripts must use **`/discovery/v1/wallets/scans`**.
 
 ## Canonical references
 

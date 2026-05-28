@@ -9,7 +9,7 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
   - Comments: Align the guide with API v1: Discovery routes live under `/discovery/v1` direct to the service and `/api/discovery/v1` at the edge; CPM business routes live under `/api/cpm/v1`; scan detail is loaded by `scan_id`; policy assessment is CPM-owned through `POST /api/cpm/v1/policies/assessment/request`; the removed Discovery CBOM and assessment routes are no longer integration paths.
 - v0.8.0
   - Date: May 10th, 2026
-  - Comments: Documented the pre-v1 wallet scan correlation state, authenticated CPM explore calls, and HTTPS script ergonomics. Superseded by v0.9 for API route names and scan correlation.
+  - Comments: Superseded by v0.9 for canonical API v1 route names and scan correlation.
 - v0.7.0
   - Date: Apr 29th, 2026
   - Comments: Defined cross-service address casing, health endpoints, explicit assessment trigger semantics, and CPM read APIs.
@@ -87,8 +87,6 @@ Technical endpoints such as `GET /health`, `GET /metrics`, and internal `/intern
 | Async policy assessment request | `POST /api/cpm/v1/policies/assessment/request` | Bearer |
 | Health | `GET /healthz` direct, `GET /api/cpm/healthz` at edge | Public |
 
-Deprecated rollout aliases such as `/api/v1/cpm/...` and old CPM short paths must not be used by new clients.
-
 ## Discovery Workflows
 
 ### Queue a scan
@@ -150,7 +148,7 @@ curl "${DISCOVERY_BASE}/discovery/v1/tls/scans/${SCAN_ID}" \
   -H "Authorization: Bearer ${JWT}" | jq .result
 ```
 
-The `result` object is the supported UI and integration payload for wallet and TLS detail. It includes the v1 fields required by the frontend after PR13a/PR13b. The removed `GET /discovery/cbom/*` route is not a supported runtime integration path.
+The `result` object is the supported UI and integration payload for wallet and TLS detail. Wallet CBOM is available on demand via `GET /discovery/v1/wallets/scans/{scan_id}/cbom` when needed.
 
 ### Delete scan
 
@@ -237,7 +235,7 @@ curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
 
 ### Request async policy assessment
 
-`POST /api/cpm/v1/policies/assessment/request` is the canonical HTTP trigger for `policy.assessment.requested.v0.1`. It replaces the removed Discovery route `POST /discovery/assessments/request`.
+`POST /api/cpm/v1/policies/assessment/request` is the canonical HTTP trigger for `policy.assessment.requested.v0.1`.
 
 This endpoint is wallet-scan only. TLS scan IDs are not eligible for CPM migration policy assessment.
 
@@ -280,25 +278,6 @@ The normalized wallet observation event remains `cafe.discovery.wallet.observed`
 
 The normative shared vocabulary lives in `cafe-contracts` under `observation/wallet/v01`. CPM owns policy semantics and Discovery owns scan persistence and scan detail projection.
 
-## Removed or Deprecated Integration Paths
-
-Do not use these paths in new code, scripts, docs, or QA runbooks:
-
-| Removed or deprecated path | Replacement |
-| --- | --- |
-| `POST /discovery/scan` | `POST /discovery/v1/scan` direct, `POST /api/discovery/v1/scan` at edge |
-| `GET /discovery/scans` | `GET /discovery/v1/wallets/scans` |
-| `GET /discovery/tls/scans` | `GET /discovery/v1/tls/scans` |
-| `GET /discovery/cbom/*` | `GET /discovery/v1/wallets/scans/{scan_id}` or `GET /discovery/v1/tls/scans/{scan_id}` |
-| `GET /discovery/rpcs` | `GET /discovery/v1/rpcs` |
-| `GET /discovery/scanners` | `GET /discovery/v1/scanners` |
-| `POST /discovery/assessments/request` | `POST /api/cpm/v1/policies/assessment/request` |
-| `GET /discovery/wallet-policy-contexts` (removed) | `GET /discovery/v1/wallets/scans` + `GET …/wallets/scans/{scan_id}` |
-| `/api/v1/cpm/...` | `/api/cpm/v1/...` |
-| `/api/wallets` | `/api/discovery/v1/wallets` |
-
-Historical documents may mention these paths only to explain migration status or removal.
-
 ## QA Sign-off Checklist
 
 Use this checklist before opening or merging API coherency documentation changes.
@@ -308,13 +287,9 @@ Use this checklist before opening or merging API coherency documentation changes
 - Scan examples use `scan_id`, `status: requested`, and `location` from `POST /discovery/v1/scan`.
 - Scan list examples expect `items`, not `results`, for v1 list envelopes.
 - Wallet and TLS detail examples fetch `.../scans/{scan_id}` and read `result`.
-- No primary workflow tells users to call `GET /discovery/cbom/*`.
-- No primary workflow tells users to call `POST /discovery/assessments/request`.
-- No primary workflow tells users to call `GET /discovery/wallet-policy-contexts` (historical only).
 - Policy assessment docs say CPM-owned, wallet-scan only, `202` on acceptance, `policy_context` rejected, TLS scan IDs rejected.
 - Delete scan docs mention CPM reference verification, `409 SCAN_REFERENCED_BY_POLICY`, and `503 POLICY_REFERENCE_CHECK_UNAVAILABLE`.
 - Edge docs preserve `/api/internal/*` as not exposed.
-- Remaining old paths are clearly marked historical, removed, deprecated, or follow-up debt.
 
 ## Additional Resources
 

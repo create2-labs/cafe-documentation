@@ -1,4 +1,4 @@
-# CPM Auth-Only Contract and Runbook
+# CPM Contract and Runbook
 
 ## 1. Purpose
 
