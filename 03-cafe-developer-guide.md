@@ -9,7 +9,7 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
   - Comments: Align the guide with API v1: Discovery routes live under `/discovery/v1` direct to the service and `/api/discovery/v1` at the edge; CPM business routes live under `/api/cpm/v1`; scan detail is loaded by `scan_id`; policy assessment is CPM-owned through `POST /api/cpm/v1/policies/assessment/request`; the removed Discovery CBOM and assessment routes are no longer integration paths.
 - v0.8.0
   - Date: May 10th, 2026
-  - Comments: Superseded by v0.9 for canonical API v1 route names and scan correlation.
+  - Comments: Documented the pre-v1 wallet scan correlation state, authenticated CPM explore calls, and HTTPS script ergonomics. Superseded by v0.9 for API route names and scan correlation.
 - v0.7.0
   - Date: Apr 29th, 2026
   - Comments: Defined cross-service address casing, health endpoints, explicit assessment trigger semantics, and CPM read APIs.
