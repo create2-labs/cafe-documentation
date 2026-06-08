@@ -219,7 +219,7 @@ CAFE follows [OWASP](https://owasp.org/) practices, including:
 
 - **`POST /api/discovery/v1/scan`** with `{ "address": "0x…" }`.
 - Server allocates **`scan_id`** (UUID) at acceptance (`requested`), before async pipeline publish.
-- Guards (**W8**, then **W1**): refuse if a scan is in progress (`409 SCAN_IN_PROGRESS`) or if an active CPM policy or draft exists for the target address (`409 CPM_EXISTS_FOR_WALLET_TARGET`).
+- Guards (**W8**, then **W1**): refuse if a scan is in progress (`409 SCAN_IN_PROGRESS`) or if a **persisted CPM policy** exists for the target address (`409`, prefer `blocking_kind: "policy"`). **Platform draft alone** does not block rescan (**IMM-W1-4**).
 - Re-scan after **`failed`** is allowed when guards pass; creates a **new** row and **new** `scan_id`.
 
 #### Read
@@ -317,7 +317,8 @@ Rules **W1–W8** apply to **wallet** targets with CPM `binding=discovery`:
 
 | ID | Rule | Discovery | CPM |
 | --- | --- | --- | --- |
-| **W1** | At most one active CPM context per address (persisted policy **or** draft) | `POST …/scan` → `409 CPM_EXISTS_FOR_WALLET_TARGET` | Lookup policies + drafts by address |
+| **W1** | **Persisted policy** blocks rescan; **platform draft alone** does **not** block (`IMM-W1-4`) | `POST …/scan` → `409` when **policy** on address (prefer `blocking_kind: "policy"`) | Lookup policies for POST guard |
+| **W1b** | **Orphan draft** after rescan — CPM workflow blocked until **rebind** to latest **completed** scan | — | Explore/validate/persist blocked until draft on **W2** `scan_id` |
 | **W2** | CPM only on latest **`completed`** scan | `GET …/wallets/scans?address=&latest=true` | `400` if `scan_id` ≠ latest completed |
 | **W3** | Delete scan only after policies removed | `409 SCAN_REFERENCED_BY_POLICY` | User deletes policies first |
 | **W4** | Delete policy does not delete scans | Unchanged | `DELETE …/policies?id=` only |
@@ -330,7 +331,7 @@ Rules **W1–W8** apply to **wallet** targets with CPM `binding=discovery`:
 
 **W7 vs W8:** CPM may stay blocked while Discovery allows rescan after `failed` (e.g. completed scan A + newer failed scan B).
 
-**Client UX (draft + rescan):** when a platform draft blocks W1, the UI may offer: local export → delete draft → new scan → reload local draft only if `target_address` and `wallet_type` match the new latest completed scan. See [cafe-frontend IMMUTABILITE.md](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md).
+**Client UX (draft + rescan, tranché 2026-06):** rescan is allowed with a **platform draft** on the address. The draft may stay on an older `scan_id` until the user clicks **Rebind to last scan for this address** (upsert `POST /api/cpm/v1/drafts` onto **W2**). **Explore**, **validate**, and **persist** stay blocked while the draft is orphaned. **`wallet_type`** must match on rebind or the UI refuses. **No** local export / `localStorage` / client reload. **Persisted policy** still blocks rescan. See [cafe-frontend IMMUTABILITE.md](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md).
 
 ---
 

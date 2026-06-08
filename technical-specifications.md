@@ -146,7 +146,7 @@ Gap analysis and migration: [`cafe-discovery/docs/SCAN_IMMUTABILITY_MIGRATION.md
 | Code | HTTP | When |
 | --- | --- | --- |
 | `SCAN_IN_PROGRESS` | 409 | W8 — newest `requested` or `started` |
-| `CPM_EXISTS_FOR_WALLET_TARGET` | 409 | W1 — policy or draft on address |
+| `CPM_EXISTS_FOR_WALLET_TARGET` | 409 | W1 — **persisted policy** on address (legacy combined policy+draft; prefer `blocking_kind: "policy"` after IMM-W1-4) |
 | `SCAN_REFERENCED_BY_POLICY` | 409 | W3 — DELETE scan with CPM reference |
 | `chain_id` without `address` | 400 | Invalid list query |
 
