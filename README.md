@@ -1,6 +1,6 @@
 # CAFE Documentation
 
-This directory contains the official documentation for the CAFE (Crypto-Agility Framework for Ethereum) project. Last updated: May 2026.
+This directory contains the official documentation for the CAFE (Crypto-Agility Framework for Ethereum) project. Last updated: June 2026.
 
 ## Available Documents
 
@@ -33,11 +33,8 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Security and Operations
 
-- [CPM Auth-Only Contract and Runbook](./docs/security/cpm-auth-only-contract.md)
-  — Authenticated-only CPM behavior, scan authorization, owner-scoped
-  persistence, wallet-only assessment request behavior, internal
-  service-token expectations, error contract, deploy expectations, and
-  operational troubleshooting
+- [CPM Auth contract](./docs/security/cpm-contract.md) — Authenticated CPM behavior, scan authorization, owner-scoped persistence, error contract
+- [CPM explore — no deployable candidate (observability & admin diagnosis)](./docs/operations/cpm-explore-no-candidate-observability.md) — **REQ9** / **IMM-OPS-1…2**: structured logs, Prometheus/Grafana, `curl` admin workflow, `incompatible.chain_scope` diagnosis (complements user-facing **REQ8** in the SPA)
 
 ## About CAFE
 

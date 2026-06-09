@@ -28,7 +28,7 @@ sequenceDiagram
 
 | Endpoint | Client `policy_context` | Purpose |
 |----------|-------------------------|---------|
-| `POST /api/cpm/v1/policies/decisions/explore` | **Required** (v1-aligned) | Synchronous ranked preview |
+| `POST /api/cpm/v1/policies/decisions/explore` | **Required** (v1-aligned) | Synchronous ranked preview; may return HTTP **200** with only `rejected_candidates` (no deployable CP) — see [observability runbook](../operations/cpm-explore-no-candidate-observability.md) |
 | `POST /api/cpm/v1/policies/assessment/request` | **Forbidden** | Async pipeline; CPM loads detail server-side |
 
 Do not send `policy_context` to the assessment endpoint. See [CPM auth runbook](../security/cpm-auth-only-contract.md) troubleshooting for **400** / **404** on assessment.

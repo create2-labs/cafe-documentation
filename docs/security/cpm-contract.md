@@ -63,6 +63,7 @@ Every CPM route must be explicitly classified. No unclassified CPM business rout
 | Route | Method | Classification | Expected access |
 | --- | --- | --- | --- |
 | `/healthz` | `GET` | Public health/readiness | Anonymous allowed |
+| `/metrics` | `GET` | Public metrics (IMM-OPS-1) | Anonymous allowed; CPM application Prometheus registry |
 | `/api/cpm/v1/policies/catalog` | `GET` | Authenticated business endpoint | Discovery session required |
 | `/api/cpm/v1/policies/templates` | `GET` | Authenticated business endpoint | Discovery session required |
 | `/api/cpm/v1/policies/instances` | `GET` | Authenticated business endpoint | Discovery session required |
@@ -333,4 +334,5 @@ Logs may include `request_id`, route, method, category, outcome, reason code, an
 - No direct CPM access to Discovery DB.
 - No tokens or secrets in logs.
 - No `user_id`, `scanId`, or `request_id` metric labels.
+- Explore no-candidate observability uses only low-cardinality labels on `cpm_explore_no_deployable_candidate_total`; investigable fields stay in structured logs — see [CPM explore observability runbook](../operations/cpm-explore-no-candidate-observability.md).
 - E2E no-token, invalid-token, forbidden, and allowed paths pass.

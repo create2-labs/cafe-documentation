@@ -4,6 +4,9 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.10.0
+  - Date: June 9th, 2026
+  - Comments: Document explore **no deployable candidate** (HTTP 200 + `rejected_candidates`), chain-scope all-or-nothing diagnosis, and pointers to platform observability (**IMM-OPS-1…2**) and admin `curl` workflow — see [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md).
 - v0.9.0
   - Date: May 19th, 2026
   - Comments: Align the guide with API v1: Discovery routes live under `/discovery/v1` direct to the service and `/api/discovery/v1` at the edge; CPM business routes live under `/api/cpm/v1`; scan detail is loaded by `scan_id`; policy assessment is CPM-owned through `POST /api/cpm/v1/policies/assessment/request`; the removed Discovery CBOM and assessment routes are no longer integration paths.
@@ -232,6 +235,18 @@ curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
       }
     }')" | jq .
 ```
+
+#### No deployable candidate (HTTP 200 — not an error)
+
+Explore may return **200** with an empty `decision.selected_policy_id` and populated `decision.rejected_candidates` — for example when `target_chain_id 56` is in the wallet context but the catalog instance `scope.chain_ids` does not include chain `56` (`incompatible.chain_scope`). This is a **product/ops signal**, not a failed HTTP call.
+
+| Audience | What to use |
+| --- | --- |
+| End user | SPA rejection banner (**REQ8**) |
+| Admin / SRE | [Operations runbook — admin `curl` workflow](./docs/operations/cpm-explore-no-candidate-observability.md#admin-diagnosis--curl-workflow): explore JSON, `GET /policies/instances`, CPM structured logs, Prometheus/Grafana |
+| Integrators | Treat HTTP 200 + rejections as a valid outcome; inspect `rejection_reasons[].code` and messages before persist |
+
+**Smoke (integrated path):** from `cafe-deploy`, `SKIP_PERSIST=1 ./scripts/test-discovery-v1-wallet-scans-to-cpm.sh` with `SCAN_ID`, `DISCOVERY_BASE`, `CPM_BASE`, and credentials — stops after explore when no candidate is selected.
 
 ### Request async policy assessment
 

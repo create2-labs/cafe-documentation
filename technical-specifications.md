@@ -8,7 +8,9 @@
 4. [Public HTTP API](#public-http-api)
 5. [Discovery service](#discovery-service)
 6. [CPM service](#cpm-service)
+   1. [Explore no-deployable-candidate observability (IMM-OPS-1…2)](#explore-no-deployable-candidate-observability-imm-ops-12)
 7. [Frontend](#frontend)
+   1. [Explore rejection UX (REQ8 / FE-IMM-13)](#explore-rejection-ux-req8--fe-imm-13)
 8. [Infrastructure and deployment](#infrastructure-and-deployment)
 9. [Data storage](#data-storage)
 10. [Messaging and scan pipeline](#messaging-and-scan-pipeline)
@@ -166,7 +168,8 @@ Gap analysis and migration: [`cafe-discovery/docs/SCAN_IMMUTABILITY_MIGRATION.md
 | `cmd/cafe-cpm` | Entrypoint |
 | `internal/app/auth.go` | Scan immutability guards, Discovery client |
 | `internal/app/authz_scan_test.go` | W2, W7, TLS rejection tests |
-| `internal/api/` | HTTP handlers (read, explore, persist) |
+| `internal/api/` | HTTP handlers (read, explore, persist); explore observability hook (**IMM-OPS-1**) |
+| `internal/metrics/` | Prometheus registry; `cpm_explore_no_deployable_candidate_total` |
 | `internal/domain/policy/` | Policy models and evaluation |
 | `internal/persistence/` | Owner-scoped store |
 
@@ -185,6 +188,62 @@ Gap analysis and migration: [`cafe-discovery/docs/SCAN_IMMUTABILITY_MIGRATION.md
 
 Integrated narrative: [`cafe-crypto-policy-mgt/docs/CPM_OPTION_A_INTEGRATED.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CPM_OPTION_A_INTEGRATED.md).
 
+### Explore no-deployable-candidate observability (IMM-OPS-1…2)
+
+When explore returns HTTP **200** with empty selection and non-empty `rejected_candidates`, CPM emits **one** structured log and **one** Prometheus increment per qualifying event (dominant `rejection_code` only — not one increment per rejection reason). Admin `curl` workflow and diagnosis checklist: [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md).
+
+| Component | Artifact |
+| --- | --- |
+| CPM (**IMM-OPS-1**) | `GET /metrics`; log `cpm.explore.no_deployable_candidate`; counter `cpm_explore_no_deployable_candidate_total` |
+| `cafe-deploy` (**IMM-OPS-2**) | Prometheus job `cafe-cpm-api` (`PROMETHEUS_CPM_METRICS_TARGET`); Grafana dashboard `dashboard-cpm-explore-rejections.json`; alert `CpmExploreIncompatibleChainScopeSustained` |
+| Smokes | `cafe-crypto-policy-mgt/scripts/test-imm-ops-1.sh`, `cafe-deploy/scripts/test-imm-ops-2.sh`, `cafe-deploy/scripts/test-discovery-v1-wallet-scans-to-cpm.sh` (`SKIP_PERSIST=1`) |
+
+#### Hook (IMM-OPS-1)
+
+- **Where:** `internal/api/read_api.go` (`DecisionExplore`) calls `recordExploreNoDeployableCandidate` in `internal/api/explore_observability.go` — after `PolicyDecisionEvaluator.Evaluate`, before `respondJSON(200)`.
+- **Condition:** `len(ranked_candidates)==0` **and** `len(rejected_candidates)>0`.
+- **Not instrumented:** HTTP errors (400 W7/W2, auth), explore with a selected candidate, explore with empty `rejected_candidates`.
+- **Response body:** unchanged (observability is side-effect only).
+
+#### Prometheus counter
+
+**Name:** `cpm_explore_no_deployable_candidate_total`
+
+**Registry:** dedicated CPM application registry (`internal/metrics`); exposed at `GET /metrics` (public, same route class as `/healthz`). Counter time series appear only after at least one qualifying explore (`CounterVec` with no labels used yet → empty scrape body until first event).
+
+**Allowed labels (low cardinality):**
+
+| Label | Semantics |
+| --- | --- |
+| `rejection_code` | **Dominant** code for the event. Priority: (1) `incompatible.chain_scope` if present among rejections; (2) else first other stable blocking code; (3) else `unknown`. **One** increment per explore — not per rejection reason. |
+| `wallet_type` | Canonical `policy_context.wallet_type` when available; else `unknown`. |
+| `binding` | `discovery` when top-level `scan_id` or Discovery-bound `policy_context` is present; else `unknown`. Do not invent `fixture`, `catalog`, or `none`. |
+| `missing_chain_count` | Bucket string: `0`, `1`, `2`, `3`, `4_plus`, or `unknown`. For `incompatible.chain_scope`: compute missing chains per rejected candidate (requested `target_chain_ids` not in instance `scope.chain_ids`), take the **minimum** across candidates, then bucketize. |
+
+**Forbidden as Prometheus labels:** `scan_id`, wallet address (raw or hash), individual `chain_ids`, `policy_instance_id`, catalog template ids, `request_id`, `tenant_id`, `owner_id`, and any other high-cardinality or PII-adjacent dimension.
+
+#### Structured log (`cpm.explore.no_deployable_candidate`)
+
+Emitted once per qualifying explore. Investigable fields (non-exhaustive):
+
+| Field | Notes |
+| --- | --- |
+| `scan_id` | When present on request / `policy_context` |
+| `requested_chain_ids`, `observed_chain_ids` | From decision summary / context |
+| `candidate_chain_ids`, `missing_chain_ids` | When derivable from rejected candidates + instance scopes |
+| `rejection_codes` | Aggregated list |
+| `dominant_rejection_code` | Same rule as Prometheus `rejection_code` label |
+| `rejected_candidates_count` | Integer |
+| Instance / template ids | Per rejected candidate when available |
+| `request_id` | From `X-Request-Id` when middleware provides it |
+| `wallet_address_hash` | SHA-256 of normalized address, truncated — **never** raw address |
+
+#### Deploy / Grafana (IMM-OPS-2)
+
+- Render: `cafe-deploy/scripts/render-templates.sh env/<env>.env`; restart `prometheus` and `grafana`.
+- Dashboard UID: `cafe-cpm-explore-rejections`; datasource Prometheus `uid: prometheus`.
+- Alert expr (summary): 15m rate of `incompatible.chain_scope` > 3× 6h baseline (`for: 15m`, severity `warning`).
+
 ---
 
 ## Frontend
@@ -192,7 +251,19 @@ Integrated narrative: [`cafe-crypto-policy-mgt/docs/CPM_OPTION_A_INTEGRATED.md`]
 - Repository: `cafe-frontend`
 - Consumes `/api/discovery/v1` and `/api/cpm/v1` through edge.
 - **Option A flow:** scan selector → detail → `policy_context` → explore → persist.
-- UX rules for W1 draft export/reload: [`IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md) (English + French section; product rules in English).
+- **Scan immutability UX (FE-IMM-0…14):** W1 rescan guards, orphan draft rebind (**FE-IMM-4**), W7/W2 scan selection, DELETE policy/scan, P1 quota breakdown, data-integrity mappers — see [`IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md) and [`IMMUTABILITE_PR.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE_PR.md).
+
+### Explore rejection UX (REQ8 / FE-IMM-13)
+
+When `POST /api/cpm/v1/policies/decisions/explore` returns HTTP **200** with empty `selected_policy_id` and non-empty `rejected_candidates`, the CPM page shows **`CpmExploreRejectionBanner`** (via `exploreDecisionAdapter`):
+
+- Explains in plain language why no Crypto Policy is deployable.
+- Surfaces dominant rejection codes (e.g. `incompatible.chain_scope`) and chain context (requested vs catalog scope) using fields already in the explore response — **no** extra admin API.
+- Complements but does **not** replace platform observability (**REQ9** / **IMM-OPS-1…2**): the banner is user-facing; logs, metrics, and Grafana are operator-facing.
+
+**E2E:** `cafe-frontend/e2e/imm-cpm-wallet.spec.ts` (Playwright, `npm run test:e2e:imm`); wrapper `cafe-deploy/scripts/run-frontend-playwright-imm.sh`.
+
+**Out of scope (frontend):** Grafana, Prometheus scrape config, structured log emission, future admin coverage-gap dashboard (**IMM-OPS-3**).
 
 ---
 
@@ -207,11 +278,13 @@ Integrated narrative: [`cafe-crypto-policy-mgt/docs/CPM_OPTION_A_INTEGRATED.md`]
 | `test-cpm-imm10-wallet-scan-w7-w2-guards.sh` | W7, W2 |
 | `test-discovery-w3-w4-scan-policy-delete.sh` | W3, W4 |
 | `test-discovery-imm12-wallet-scan-cbom.sh` | W6 / CBOM |
+| `test-discovery-v1-wallet-scans-to-cpm.sh` | Option A list/detail → explore (use `SKIP_PERSIST=1` to stop on no-candidate) |
+| `test-imm-ops-2.sh` | IMM-OPS-2 Prometheus scrape + Grafana config |
 | `lib/discovery-v1-http-smoke.sh` | Legacy 404 |
 
 - **Atomic deploy:** IMM-2 (schema/index) + IMM-3 (writers) in same window — see `cafe-deploy/docs/RUNBOOK_SCAN_HISTORY.md`.
 
-Security hardening: `cafe-deploy/SECURITY_ENHANCEMENT.md`, `cafe-documentation/docs/security/cpm-auth-only-contract.md`.
+Security hardening: `cafe-deploy/SECURITY_ENHANCEMENT.md`, [`docs/security/cpm-contract.md`](./docs/security/cpm-contract.md).
 
 ---
 

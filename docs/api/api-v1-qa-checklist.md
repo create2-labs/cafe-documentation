@@ -26,6 +26,8 @@ Use this checklist when reviewing API coherency docs, runbooks, scripts, and rel
 
 - Policy catalog, templates, instances, drafts, policies, and explore examples use `/api/cpm/v1`.
 - `POST /api/cpm/v1/policies/decisions/explore` is described as synchronous preview and non-persistent.
+- Explore may return HTTP **200** with empty selection and `rejected_candidates` (e.g. `incompatible.chain_scope`); ops runbook and IMM-OPS observability are documented in [CPM explore observability](../operations/cpm-explore-no-candidate-observability.md).
+- `GET /metrics` on CPM is documented as public application metrics (**IMM-OPS-1**).
 - `POST /api/cpm/v1/policies/assessment/request` is described as the async assessment trigger.
 - Assessment request is wallet-scan only.
 - Assessment request rejects client `policy_context`.

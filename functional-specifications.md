@@ -44,6 +44,7 @@
          2. [Delete](#delete-3)
       6. [Remediation (product direction)](#remediation-product-direction)
       7. [Governance — scan immutability and CPM coupling](#governance--scan-immutability-and-cpm-coupling)
+      8. [Platform observability — CPM explore (REQ9)](#platform-observability--cpm-explore-no-deployable-candidate-req9)
    6. [Data structures](#data-structures)
       1. [Scan list item (wallet)](#scan-list-item-wallet)
       2. [Scan detail (wallet)](#scan-detail-wallet)
@@ -279,6 +280,8 @@ States: `requested` → `started` → `completed` | `failed` (or `requested` →
 
 - **`POST /api/cpm/v1/policies/decisions/explore`** with `scan_id`, **`policy_context`**, `selection_request`.
 - Guards: **W7** (newest row must be `completed`), **W2** (`scan_id` must match latest completed for target), wallet-only (**TLS → 404**).
+- **Chain scope (all-or-nothing):** every id in `selection_request.target_chain_ids` must appear in a candidate instance `scope.chain_ids` for that candidate to be deployable. Partial coverage is rejected (e.g. `incompatible.chain_scope` when chain `56` is observed and requested but absent from catalog scope).
+- **No deployable candidate (HTTP 200):** when no ranked candidate remains and `rejected_candidates` is non-empty, the response is still **success** — not an error. The SPA explains why (**REQ8** / **FE-IMM-13**). Platform ops consume **REQ9** observability ([operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md)): structured log `cpm.explore.no_deployable_candidate`, counter `cpm_explore_no_deployable_candidate_total`, Grafana dashboard **IMM-OPS-2**.
 
 #### Persist
 
@@ -332,6 +335,48 @@ Rules **W1–W8** apply to **wallet** targets with CPM `binding=discovery`:
 **W7 vs W8:** CPM may stay blocked while Discovery allows rescan after `failed` (e.g. completed scan A + newer failed scan B).
 
 **Client UX (draft + rescan, tranché 2026-06):** rescan is allowed with a **platform draft** on the address. The draft may stay on an older `scan_id` until the user clicks **Rebind to last scan for this address** (upsert `POST /api/cpm/v1/drafts` onto **W2**). **Explore**, **validate**, and **persist** stay blocked while the draft is orphaned. **`wallet_type`** must match on rebind or the UI refuses. **No** local export / `localStorage` / client reload. **Persisted policy** still blocks rescan. See [cafe-frontend IMMUTABILITE.md](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md).
+
+### Platform observability — CPM explore no deployable candidate (REQ9)
+
+When explore returns HTTP **200** with no deployable Crypto Policy (`selected_policy_id` empty, `rejected_candidates` non-empty), the product must give **operators** exploitable visibility without exposing wallet identities in metrics or real-time end-user alerts.
+
+#### Product intent
+
+Discovery has produced a **usable wallet scan context**, but CPM cannot propose a catalog route that satisfies the selection request. Typical reasons:
+
+- **Catalog gap** — a discovered chain (e.g. `56`) has no CP instance whose `scope.chain_ids` covers it.
+- **Scope mismatch** — instance scope is narrower than the wallet’s multi-chain set (**all-or-nothing** on `target_chain_ids`).
+- **Other blocking codes** — posture, maturity, multichain flags (less common in early deployments).
+
+This signal helps product and ops detect coverage gaps, misconfigured catalogs, or frequent user paths that need new CP templates. It is **not** a failed API call and does **not** warrant per-wallet email or Slack from the platform core.
+
+#### Separation of concerns (REQ8 vs REQ9)
+
+| Audience | Requirement | Delivery |
+| --- | --- | --- |
+| **End user** | Understand why no policy applies during explore | **REQ8** — SPA banner (`CpmExploreRejectionBanner`, **FE-IMM-13**): observed vs requested chains, dominant `rejection_reasons[].code` (e.g. `incompatible.chain_scope`) |
+| **Platform / SRE** | Trend, alert, and investigate incidents | **REQ9** — **IMM-OPS-1** (CPM log + Prometheus counter), **IMM-OPS-2** (Grafana dashboard + sustained alert on `cafe-deploy`) |
+| **Future admin** | Actionable coverage-gap synthesis | **IMM-OPS-3** — deferred; not in current release scope |
+
+#### Operator expectations
+
+- **Grafana** dashboard **CAFE - CPM Explore Rejections** shows rates and breakdowns by `rejection_code`, `wallet_type`, `missing_chain_count` bucket — not individual wallets.
+- **Alert** `CpmExploreIncompatibleChainScopeSustained` fires on **sustained** elevation of `incompatible.chain_scope`, not a single explore event.
+- **Investigation** uses API explore JSON, `GET /policies/instances` (scope vs targets), CPM structured logs (`cpm.explore.no_deployable_candidate`), and optional Prometheus queries — documented in the [operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md).
+
+#### Privacy and data handling
+
+- Prometheus labels stay **low cardinality** (`rejection_code`, `wallet_type`, `binding`, `missing_chain_count` bucket only).
+- **Never** label `scan_id`, wallet address, raw or hashed wallet, `chain_ids`, catalog ids, `tenant_id`, `owner_id`, or `request_id` on metrics.
+- Structured logs may include `scan_id`, chain id lists, catalog instance ids, and **hashed** wallet (`wallet_address_hash`) for support — never raw wallet address in logs or metrics.
+
+#### Out of scope for REQ9
+
+- Changing compatibility evaluator semantics.
+- Real-time per-wallet notifications.
+- Admin UI in `cafe-frontend` (deferred **IMM-OPS-3**).
+
+**Technical detail:** [technical-specifications.md — IMM-OPS](./technical-specifications.md#explore-no-deployable-candidate-observability-imm-ops-12) · [operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md)
 
 ---
 
