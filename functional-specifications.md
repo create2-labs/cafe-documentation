@@ -283,10 +283,14 @@ States: `requested` → `started` → `completed` | `failed` (or `requested` →
 - **Chain scope (all-or-nothing):** every id in `selection_request.target_chain_ids` must appear in a candidate instance `scope.chain_ids` for that candidate to be deployable. Partial coverage is rejected (e.g. `incompatible.chain_scope` when chain `56` is observed and requested but absent from catalog scope).
 - **No deployable candidate (HTTP 200):** when no ranked candidate remains and `rejected_candidates` is non-empty, the response is still **success** — not an error. The SPA explains why (**REQ8** / **FE-IMM-13**). Platform ops consume **REQ9** observability ([operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md)): structured log `cpm.explore.no_deployable_candidate`, counter `cpm_explore_no_deployable_candidate_total`, Grafana dashboard **IMM-OPS-2**.
 
-#### Persist
+#### Persist (EOA — CP-PERSIST V1)
 
-- **`POST /api/cpm/v1/policies`** with `binding=discovery`, `scan_id`, payload.
-- Same guards as explore.
+- **Normative EOA path:** `POST /api/cpm/v1/wallet-challenges` (mandatory stateless canonical message) → EIP-191 / `personal_sign` → **`POST /api/cpm/v1/drafts/{draft_id}/persist`** with `signed_message` + `signature`.
+- **Wallet proof required** for persist. Scan, explore, and platform draft save do **not** require proof (non-regression S1–S3).
+- Same immutability guards as explore (**W7**, **W2**, wallet-only, TLS → **404**).
+- Legacy **`POST /api/cpm/v1/policies`** is **not** the normative EOA persist endpoint; Discovery-bound EOA payloads without signed authorization return **403** `WALLET_CONTROL_PROOF_REQUIRED`.
+- V1 persist is **EOA-only**; non-EOA drafts return **422** `UNSUPPORTED_WALLET_TYPE` on persist routes.
+- Details: [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md).
 
 #### Read instances
 

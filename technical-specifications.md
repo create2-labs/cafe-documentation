@@ -94,7 +94,7 @@ Non-goals for this document: line-by-line OpenAPI field lists (see per-repo `ope
 - **Guards:** `internal/app/auth.go` — W7 (`limit=1` newest row), W2 (`latest=true`), TLS rejection.
 - **Async:** `POST …/policies/assessment/request` loads wallet detail server-side; rejects TLS.
 
-See [docs/architecture/cpm-option-a-v1-flow.md](./docs/architecture/cpm-option-a-v1-flow.md).
+See [docs/architecture/cpm-v1-flow.md](./docs/architecture/cpm-v1-flow.md) and [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md).
 
 ---
 
@@ -250,7 +250,7 @@ Emitted once per qualifying explore. Investigable fields (non-exhaustive):
 
 - Repository: `cafe-frontend`
 - Consumes `/api/discovery/v1` and `/api/cpm/v1` through edge.
-- **Option A flow:** scan selector → detail → `policy_context` → explore → persist.
+- **Option A flow:** scan selector → detail → `policy_context` → explore → backend draft → wallet-challenges → sign → `drafts/{draft_id}/persist` (CP-PERSIST V1).
 - **Scan immutability UX (FE-IMM-0…14):** W1 rescan guards, orphan draft rebind (**FE-IMM-4**), W7/W2 scan selection, DELETE policy/scan, P1 quota breakdown, data-integrity mappers — see [`IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md) and [`IMMUTABILITE_PR.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE_PR.md).
 
 ### Explore rejection UX (REQ8 / FE-IMM-13)
