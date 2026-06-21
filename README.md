@@ -6,7 +6,7 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Specifications (English)
 
-- **[functional-specifications.md](./functional-specifications.md)** — CAFE product behavior: Discovery scans, CPM policies, governance rules (W1–W8), workflows, and compliance overview
+- **[functional-specifications.md](./functional-specifications.md)** — CAFE product behavior: Discovery scans, CPM policies, CPM UI user stories (**US1–US21**), governance rules (W1–W8), workflows, and compliance overview
 - **[technical-specifications.md](./technical-specifications.md)** — CAFE technical architecture: services, APIs, persistence, messaging, deployment, and testing
 
 > **Note:** [specs-fonctionnelles.md](./specs-fonctionnelles.md) is a deprecated stub. It previously held a legacy *Ponybook* document; use the English specifications above.
@@ -17,7 +17,7 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### User Guide
 
-- **[02-cafe-user-guide.md](./02-cafe-user-guide.md)** — Complete user guide for the CAFE frontend: navigation (Discovery, Platform, CPM, Remediation), account-based access, and all features
+- **[02-cafe-user-guide.md](./02-cafe-user-guide.md)** — Complete user guide for the CAFE frontend: navigation (Discovery, Platform, CPM, Remediation), **Crypto Policy Management** graph workflow, account-based access, and all features
 
 ### Developer Guide
 
@@ -30,6 +30,7 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 ### Architecture
 
 - [CPM — Discovery v1 to policy flow](./docs/architecture/cpm-v1-flow.md) — What Option A is (post-V1 real scan context via Discovery); scan → list/detail → explore → persist; links to [CPM design workplan](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md) and maintainer contracts.
+- [CPM UI specifications (`cafe-frontend/CPM-specs-ui.md`)](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) — Normative CPM page user stories **US1–US21** and delivery epics **CPM-UI-1…8** (graph workspace, persist UX).
 
 ### API QA
 

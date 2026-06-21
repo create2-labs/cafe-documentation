@@ -71,7 +71,7 @@ Layered smokes (same contract, narrower scope):
 | `test-cpm-cp-persist-t5-web-ui-flow.sh` | Web UI API contract (+ optional vitest) |
 | `test-cpm-cp-persist-t6-cli-flow.sh` | `cafe.sh` CLI |
 
-Web UI manual path: sign in → **Crypto Policy Management** → select EOA scan → explore → save backend draft → validate → **Persist validated policy** (injected wallet `personal_sign`).
+Web UI manual path: sign in → **Crypto Policy Management** → select EOA scan → explore → save backend draft → click **Persist** (local structural check runs automatically) → wallet `personal_sign` when validation passes.
 
 CLI manual path: see [`cafe-frontend` / `docs/cpm-developer.md`](https://github.com/create2-labs/cafe-frontend/blob/main/docs/cpm-developer.md#cli--cp-persist-v1-cp-persist-t6).
 
@@ -95,6 +95,7 @@ For auth/session errors (`401`, `403` scan authz), see [CPM contract runbook](./
 | Document | Location |
 | --- | --- |
 | Normative spec (Part VI frozen) | [`CP_PERSIST.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CP_PERSIST.md) |
+| CPM UI persist UX (**US8**, **US21**) | [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) |
 | OpenAPI | [`openapi/cpm-v1.yaml`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/openapi/cpm-v1.yaml) |
 | Option A flow (scan → explore → persist) | [../architecture/cpm-v1-flow.md](../architecture/cpm-v1-flow.md) |
 | Frontend maintainer guide | [`cafe-frontend/docs/cpm-developer.md`](https://github.com/create2-labs/cafe-frontend/blob/main/docs/cpm-developer.md) |

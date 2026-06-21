@@ -11,7 +11,7 @@ Public architecture summary for integrators and technical writers. Normative HTT
 
 1. **Wallet scan** is queued and stored (Discovery DB today; Persistence Service is the long-term scan-data owner). **No wallet proof required.**
 2. **List + detail** — authenticated `GET /api/discovery/v1/wallets/scans` and `GET /api/discovery/v1/wallets/scans/{scan_id}`.
-3. **CPM UI** — `cafe-frontend` F1–F5: scan selector, `policy_context` from detail, explore, validate, backend draft save, persist with real `scan_id`.
+3. **CPM UI** — `cafe-frontend` graph workspace (**CPM-UI-1…8**, user stories **US1–US21**): scan node, catalog on first edge, draft/persisted branches, implicit validation on **Persist** (**CPM-UI-8**), wallet-signed persist with real `scan_id`. Spec: [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md).
 4. **Explore** — `POST /api/cpm/v1/policies/decisions/explore` with `scan_id`, **`policy_context`**, `selection_request`. **No wallet proof required.**
 5. **Platform draft** — `POST /api/cpm/v1/drafts` (owner-scoped). **No wallet proof required.**
 6. **Persist (EOA, CP-PERSIST V1)** — `POST /api/cpm/v1/wallet-challenges` → EIP-191 / `personal_sign` → `POST /api/cpm/v1/drafts/{draft_id}/persist` with `signed_message` + `signature`. **Wallet proof required.**

@@ -4,6 +4,9 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.12.0
+  - Date: June 21st, 2026
+  - Comments: Align CPM persist table with CP-PERSIST V1 (`wallet-challenges`, `drafts/{id}/persist`); reference CPM UI user stories **US1–US21** / [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md).
 - v0.11.0
   - Date: June 21st, 2026
   - Comments: Document public service version endpoints (`GET /api/version`, `GET /api/cpm/version`) and Platform Status CPM version tile (**CPM-OPS-3** / **CPM-UI-7A**).
@@ -105,7 +108,9 @@ Version strings come from the image build (`APP_VERSION` / Git tag). They are **
 | Instances | `GET /api/cpm/v1/policies/instances` | Bearer |
 | Explore decision | `POST /api/cpm/v1/policies/decisions/explore` | Bearer |
 | List or read policies | `GET /api/cpm/v1/policies` | Bearer |
-| Persist policy | `POST /api/cpm/v1/policies` | Bearer |
+| Wallet challenge (EOA persist prep) | `POST /api/cpm/v1/wallet-challenges` | Bearer |
+| Persist draft (EOA — normative) | `POST /api/cpm/v1/drafts/{draft_id}/persist` | Bearer + signed authorization |
+| Legacy policy upsert | `POST /api/cpm/v1/policies` | Bearer — **not** normative EOA persist; missing proof → **403** |
 | Delete policy | `DELETE /api/cpm/v1/policies?id=...` | Bearer |
 | Drafts | `/api/cpm/v1/drafts` | Bearer |
 | Async policy assessment request | `POST /api/cpm/v1/policies/assessment/request` | Bearer |
@@ -230,7 +235,7 @@ When `scan_id` is supplied, CPM may authorize scan visibility against Discovery,
 
 **Option A** (post-V1 CPM) means policy workflows run against **real user-owned wallet scans** exposed by the authenticated Discovery backend—see [CPM `workplans/CPM_post_v_1_option_a_scan_context.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md). The v1 implementation uses list/detail under `/discovery/v1/wallets/scans` and CPM explore with client-built **`policy_context`** from scan detail (distinct from async assessment, which forbids `policy_context`).
 
-Production UI and integrators on **Option A** load wallet scan **detail** from `GET /discovery/v1/wallets/scans/{scan_id}` (edge: `/api/discovery/v1/...`) and send that shape as **`policy_context`** on explore, plus top-level **`scan_id`** and **`selection_request`**. Field mapping is normative in [Discovery `CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md`](https://github.com/create2-labs/cafe-discovery/blob/main/docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) §3.1; the integrated story is in [CPM `CPM_OPTION_A_INTEGRATED.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CPM_OPTION_A_INTEGRATED.md) and [Option A architecture](./docs/architecture/cpm-option-a-v1-flow.md).
+Production UI and integrators on **Option A** load wallet scan **detail** from `GET /discovery/v1/wallets/scans/{scan_id}` (edge: `/api/discovery/v1/...`) and send that shape as **`policy_context`** on explore, plus top-level **`scan_id`** and **`selection_request`**. Field mapping is normative in [Discovery `CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md`](https://github.com/create2-labs/cafe-discovery/blob/main/docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) §3.1; the integrated story is in [CPM `CPM_OPTION_A_INTEGRATED.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CPM_OPTION_A_INTEGRATED.md) and [Option A architecture](./docs/architecture/cpm-v1-flow.md). CPM UI behavior (graph workspace, **US1–US21**): [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md).
 
 ```bash
 DETAIL=$(curl -s "${DISCOVERY_BASE}/discovery/v1/wallets/scans/${SCAN_ID}" \

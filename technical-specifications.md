@@ -11,8 +11,9 @@
    1. [Deploy version endpoint (CPM-OPS-3)](#deploy-version-endpoint-cpm-ops-3)
    2. [Explore no-deployable-candidate observability (IMM-OPS-1…2)](#explore-no-deployable-candidate-observability-imm-ops-12)
 7. [Frontend](#frontend)
-   1. [Platform Status versions (CPM-UI-7A)](#platform-status-versions-cpm-ui-7a)
-   2. [Explore rejection UX (REQ8 / FE-IMM-13)](#explore-rejection-ux-req8--fe-imm-13)
+   1. [CPM graph workspace (CPM-UI-1…8 / US1–US21)](#cpm-graph-workspace-cpm-ui-18--us1us21)
+   2. [Platform Status versions (CPM-UI-7A)](#platform-status-versions-cpm-ui-7a)
+   3. [Explore rejection UX (REQ8 / FE-IMM-13)](#explore-rejection-ux-req8--fe-imm-13)
 8. [Infrastructure and deployment](#infrastructure-and-deployment)
 9. [Data storage](#data-storage)
 10. [Messaging and scan pipeline](#messaging-and-scan-pipeline)
@@ -272,6 +273,28 @@ Emitted once per qualifying explore. Investigable fields (non-exhaustive):
 - Consumes `/api/discovery/v1` and `/api/cpm/v1` through edge.
 - **Option A flow:** scan selector → detail → `policy_context` → explore → backend draft → wallet-challenges → sign → `drafts/{draft_id}/persist` (CP-PERSIST V1).
 - **Scan immutability UX (FE-IMM-0…14):** W1 rescan guards, orphan draft rebind (**FE-IMM-4**), W7/W2 scan selection, DELETE policy/scan, P1 quota breakdown, data-integrity mappers — see [`IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md) and [`IMMUTABILITE_PR.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE_PR.md).
+- **CPM graph workspace (CPM-UI-1…8):** graph-first page spec and user stories **US1–US21** in [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md); product summary in [functional-specifications.md — CPM UI](./functional-specifications.md#cpm-user-interface--graph-workspace-us1us21).
+
+### CPM graph workspace (CPM-UI-1…8 / US1–US21)
+
+Delivery epics merged in `cafe-frontend` (2026-06). Normative acceptance: [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md).
+
+| Epic | Focus | User stories |
+| --- | --- | --- |
+| **CPM-UI-1** | Graph shell, empty state, scan selection | US1, US2 |
+| **CPM-UI-2** | Catalog, draft lifecycle, save/resume | US3–US5 |
+| **CPM-UI-3** | Persisted read-only + replacement draft display | US6, US7 |
+| **CPM-UI-4** | Persist + replace (CP-PERSIST V1 wiring) | US8, US9 |
+| **CPM-UI-5** | Delete with confirmation | US10, US11 |
+| **CPM-UI-6** | Graph-only workspace, entry modes, modals, leave guard, headers | US12–US17, US19, US20 |
+| **CPM-UI-7** | Platform Status CPM version tile | US18 |
+| **CPM-UI-8** | Single **Persist** CTA — implicit local validation (**US21**) | US8, US9, US21 |
+
+**Key modules:** `CryptoPolicyManagement.vue`, `PolicyGraph.vue`, `policyGraphShellCompose.ts`, `useCpmScanContext.ts`, `useCpmPolicySelection.ts`, `usePolicyValidation.ts`, `usePolicyPersistence.ts`, `useCpmWorkspaceSession.ts`, `cpmUnsavedDraftLeaveGate`.
+
+**Persist UX (CPM-UI-8):** `validatePolicyDraft` runs at start of **Persist**; no separate Validate button; wallet-challenge only after local validation succeeds. See [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md).
+
+**Entry modes:** cold start (State 2 picker, no default scan), session resume (`useCpmWorkspaceSession`), Discovery `?scanId=`, in-page scan change with backend hydration (**CPM-UI-6I**).
 
 ### Platform Status versions (CPM-UI-7A)
 
@@ -409,6 +432,8 @@ cd cafe-deploy/scripts
 | Document | Role |
 | --- | --- |
 | [functional-specifications.md](./functional-specifications.md) | Product behavior |
+| [02-cafe-user-guide.md](./02-cafe-user-guide.md) | End-user CPM graph workflow (**US1–US21**) |
+| [cafe-frontend CPM-specs-ui.md](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) | Normative CPM UI user stories and epics |
 | [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) | curl examples, paths |
 | [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) | Platform admin: catalog, deploy, observability |
 | [WORKPLAN_API.md](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) | Normative API workplan |

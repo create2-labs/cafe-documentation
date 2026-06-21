@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.5.0
+  - Date: June 21st, 2026
+  - Comments: Add **Crypto Policy Management** user guide aligned with CPM UI user stories **US1–US21** (graph workspace, persist without separate Validate, Discovery deep link, session resume, leave guard).
 - v0.4.0
   - Date: June 21st, 2026
   - Comments: Document Platform Status version tiles including **CPM Version** (**CPM-UI-7A**).
@@ -27,11 +30,12 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 4. [Wallet Scanning](#wallet-scanning)
 5. [TLS Endpoint Scanning](#tls-endpoint-scanning)
 6. [Viewing Scan Results](#viewing-scan-results)
-7. [Platform Status](#platform-status)
-8. [Security Page](#security-page)
-9. [Settings and Plans](#settings-and-plans)
-10. [Wallet Management](#wallet-management)
-11. [Anonymous Mode](#anonymous-mode)
+7. [Crypto Policy Management](#crypto-policy-management)
+8. [Platform Status](#platform-status)
+9. [Security Page](#security-page)
+10. [Settings and Plans](#settings-and-plans)
+11. [Wallet Management](#wallet-management)
+12. [Anonymous Mode](#anonymous-mode)
 
 ## Getting Started
 
@@ -311,6 +315,85 @@ Click on any scan result to view:
 - Risk score calculation
 - Security recommendations
 - CBOM (Cryptographic Bill of Materials)
+
+## Crypto Policy Management
+
+The **Crypto Policy Management** page (`/crypto-policy-management`) lets you define a **recommended Crypto Policy (CP)** migration path for an **EOA wallet scan**. The page is **graph-first**: one column shows your selected scan, policy template, and migration steps as connected nodes.
+
+**Prerequisites:**
+
+- You must be **signed in**.
+- You need at least one **completed EOA wallet scan** from Discovery (TLS scans cannot be used for CPM).
+- CPM uses your latest **completed** scan semantics when guards apply (see [functional specifications](./functional-specifications.md#governance--scan-immutability-and-cpm-coupling)).
+
+### Getting started
+
+#### No wallet scan yet
+
+If you have no eligible EOA scan, the page shows an **empty state** with a link to **Discovery → Wallet scan**. Run a wallet scan first, then return to CPM.
+
+#### Selecting a wallet scan
+
+On first visit, you pick a scan from the **scan picker** (no scan is pre-selected). After you select a scan:
+
+- The **scan node** appears as the first graph element.
+- A **+** edge lets you choose a Crypto Policy from the catalog.
+- If the backend already has a **draft** and/or **persisted CP** for that scan, the matching graph branch loads automatically.
+
+**Change scan:** click the **scan node** to open a modal with your wallet scans (search, eligibility gates). Pick another scan to switch targets. If you have **unsaved draft edits** not yet saved to the server, you are asked to confirm before switching.
+
+### Opening CPM from Discovery
+
+On **Discovery → Wallet scan**, each eligible row may show **Open CPM** (label may reflect status: no policy, resume draft, view policy). This opens CPM with that scan pre-selected (`?scanId=…`).
+
+When you leave CPM and return **in the same browser tab** without a deep link, the page restores your **last active scan** and graph state when possible.
+
+### Choosing a Crypto Policy
+
+1. Click the **first edge** (+) from the scan node.
+2. Browse the **CP catalog** — compatible policies are selectable; incompatible ones are greyed out with a reason.
+3. Select a policy — a **draft branch** appears in the graph with a **Draft** header node, then migration steps.
+
+You can **change the draft policy** anytime by clicking the first edge again. If your draft already contains meaningful work, you must confirm before replacing it. Changing the draft **never** modifies a **persisted (recommended)** policy.
+
+When a **persisted CP** already exists, the first edge is labeled **Prepare Replacement** (or **Change Replacement Draft** if a replacement draft exists). Selecting a policy creates a **replacement draft** while the current recommendation stays visible as a read-only **Persisted** branch.
+
+### Understanding the graph
+
+| What you see | Meaning |
+| --- | --- |
+| Scan node only | No draft and no persisted CP for this scan |
+| **Draft** header + steps | Work-in-progress policy (not yet recommended) |
+| **Persisted** header + steps (read-only) | Current **recommended** policy for the scan |
+| **Persisted** + **Replacement Draft** branches | Recommended policy unchanged; you are preparing a possible replacement |
+
+Click a **policy step node** to open a **details modal** — inspection summary and editable parameters when the branch is editable.
+
+### Saving and persisting
+
+**Save draft** stores your work on the platform (recoverable on return). It does **not** make the policy recommended.
+
+**Persist** makes your draft the **recommended** policy for the scan. There is **one Persist button** — no separate **Validate** step:
+
+1. Click **Persist** (or **Replace persisted policy** when replacing).
+2. The app runs a **local structural check** on the draft. If issues are found, they are listed and **no wallet signature** is requested.
+3. If the check passes, you sign with your **EOA wallet** (MetaMask or injected provider) to authorize persistence.
+4. For **replacement**, you also confirm which policy replaces which before signing.
+
+Deleting a **draft** or **persisted CP** always requires **confirmation**. Deleting a persisted CP does **not** require a wallet signature. Deleting a draft does not remove a persisted recommendation, and vice versa.
+
+### Leaving the page with unsaved work
+
+If you edited a draft but have **not** saved it to the server, navigating away from CPM (another page, sign-out, or closing the tab) shows a warning with options to **Stay**, **Leave without saving**, or **Save draft** (when allowed). Saved server drafts do not trigger this warning — you can resume them later.
+
+### Explore without a deployable policy
+
+If no catalog policy fits your scan (for example chain scope mismatch), CPM shows an **explanation banner** with rejection reasons. This is not a broken scan — it means the catalog does not yet cover your wallet’s chain set. Platform operators monitor these cases separately.
+
+### Related documentation
+
+- Product rules and user stories **US1–US21**: [functional specifications — CPM UI](./functional-specifications.md#cpm-user-interface--graph-workspace-us1us21)
+- Wallet signature at persist: [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md)
 
 ## Platform Status
 

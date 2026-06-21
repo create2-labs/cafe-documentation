@@ -46,6 +46,7 @@
       7. [Governance — scan immutability and CPM coupling](#governance--scan-immutability-and-cpm-coupling)
       8. [Platform observability — CPM explore (REQ9)](#platform-observability--cpm-explore-no-deployable-candidate-req9)
       9. [Platform Status — deployed service versions (US18)](#platform-status--deployed-service-versions-us18)
+      10. [CPM user interface — graph workspace (US1–US21)](#cpm-user-interface--graph-workspace-us1us21)
    6. [Data structures](#data-structures)
       1. [Scan list item (wallet)](#scan-list-item-wallet)
       2. [Scan detail (wallet)](#scan-detail-wallet)
@@ -129,7 +130,7 @@ CAFE follows a **three-layer product architecture** plus shared infrastructure:
                     └──────────────┘     └─────────────┘
 ```
 
-**CPM integration:** the UI and CPM correlate work by **`scan_id`** from Discovery v1 wallet scans. TLS scans remain Discovery-only for product flows. See [docs/architecture/cpm-option-a-v1-flow.md](./docs/architecture/cpm-option-a-v1-flow.md).
+**CPM integration:** the UI and CPM correlate work by **`scan_id`** from Discovery v1 wallet scans. TLS scans remain Discovery-only for product flows. See [docs/architecture/cpm-v1-flow.md](./docs/architecture/cpm-v1-flow.md).
 
 ---
 
@@ -402,6 +403,86 @@ Authenticated users can confirm which **deployed builds** are running from **Pla
 
 **Out of scope:** catalog `catalog_version`, template `version` fields, or CPM policy instance metadata.
 
+### CPM user interface — graph workspace (US1–US21)
+
+The **Crypto Policy Management** page (`/crypto-policy-management`) is a **graph-first workspace** for EOA wallet scans only. TLS scans are never CPM targets. Normative UI acceptance criteria live in [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) (delivery epics **CPM-UI-1…8**).
+
+#### Vocabulary (UI)
+
+| Term | Meaning |
+| --- | --- |
+| **Draft** | Non-actionable in-progress CP configuration (platform draft on backend) |
+| **Persisted CP** | Currently **recommended** policy for a scan (owner-scoped, wallet-signed at persist) |
+| **Replacement draft** | Draft prepared while a persisted CP already exists; does not change the recommendation until persist succeeds |
+| **Scan-only shell** | Scan node selected; no draft and no persisted CP on backend |
+
+A scan may have at most one persisted CP and at most one draft; both may coexist (dual-branch graph, State 7).
+
+#### Entry modes
+
+| Mode | Behavior |
+| --- | --- |
+| **Cold start** | Scan picker (State 2); **no** scan pre-selected (**US15**) |
+| **Session resume** | Last active scan and graph state restored when returning without `?scanId=` (**US13**) |
+| **Discovery deep link** | `?scanId=<uuid>` from **Open CPM** on wallet scan rows (**US12**) |
+| **In-page scan change** | Click scan node → modal; hydrates draft/persisted CP for newly selected scan (**US14**, **US15**) |
+
+`?scanId=` in the URL overrides session resume.
+
+#### User stories summary
+
+| ID | Intent |
+| --- | --- |
+| **US1** | Empty state when no EOA scan — CTA to Discovery; no catalog |
+| **US2** | Select eligible EOA scan; first graph node + edge; hydrate draft/persisted CP when backend has them |
+| **US3** | First edge opens CP catalog; compatible policies selectable; selecting creates/updates draft |
+| **US4** | Change draft CP freely; confirm when draft has meaningful progress; persisted CP unchanged |
+| **US5** | Resume platform draft on scan select, session resume, or deep link |
+| **US6** | View persisted CP read-only branch; clearly marked **recommended** |
+| **US7** | Prepare replacement draft via first edge; persisted CP unchanged until successful persist |
+| **US8** | **Persist** new draft in one action — implicit local structural check, then wallet sign + backend persist (**CPM-UI-8**) |
+| **US9** | **Persist** replacement draft — local validation → confirm → wallet → persist; prior persisted CP unchanged on failure |
+| **US10** | Delete draft / replacement draft with confirmation; persisted CP unchanged |
+| **US11** | Delete persisted CP with confirmation (no wallet signature); replacement draft unchanged if any |
+| **US12** | **Open CPM** from Discovery wallet scan list → `/crypto-policy-management?scanId=…` |
+| **US13** | Same-tab session resume of last CPM workspace |
+| **US14** | Change scan from scan-node modal; warn on unsaved platform draft at risk |
+| **US15** | Graph shell matches scan CP state (scan-only vs draft vs persisted vs dual-branch) |
+| **US16** | Policy node click → details/parameter modal (no legacy side column) |
+| **US17** | Single full-width graph column; legacy right workspace removed |
+| **US18** | **CPM Version** tile on Platform Status (see above) |
+| **US19** | Warn before leaving CPM with unsaved platform draft at risk (`beforeunload` + in-app navigation) |
+| **US20** | CP branch header node (**Draft** / **Persisted** / **Replacement Draft**) before topology |
+| **US21** | Structural validation runs implicitly on **Persist** — no separate **Validate** button |
+
+#### Persist UX (US8, US9, US21 — CPM-UI-8)
+
+The graph draft panel exposes a single primary action: **Persist** (replacement: e.g. **Replace persisted policy**).
+
+1. User clicks **Persist**.
+2. **Local structural validation** runs (`policyDraftValidation` / `usePolicyValidation`) — not a CPM backend validate API.
+3. On failure: show validation issues; **do not** open MetaMask or call `wallet-challenges` / `POST …/drafts/{id}/persist`.
+4. On success: save backend draft if needed → `POST …/wallet-challenges` → `personal_sign` → `POST …/drafts/{draft_id}/persist` ([CP-PERSIST V1](./docs/security/cp-persist-v1.md)).
+5. Replacement path adds an explicit confirmation dialog **after** local validation succeeds and **before** wallet signature.
+
+#### Graph states (reference)
+
+| State | Situation |
+| --- | --- |
+| 1 | No EOA scans |
+| 2 | Scan picker (cold start) |
+| 3 | Scan selected; scan-only shell |
+| 4 | CP catalog open (first edge) |
+| 5 | Draft branch visible |
+| 6 | Persisted CP read-only branch |
+| 7 | Persisted + replacement draft (dual branch) |
+
+#### Out of scope (CPM UI V1)
+
+On-chain remediation lifecycle, TLS as CPM target, automated persist without user action, historical policy browsing, separate backend **validate** route for drafts.
+
+**Maintainer spec:** [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) · immutability UX: [`IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md)
+
 ---
 
 ## Data structures
@@ -457,10 +538,13 @@ Wire event: `cafe.discovery.wallet.observed` v0.1 — see [03-cafe-developer-gui
 
 ### Create policy from scan (Option A)
 
-1. List scans: `GET …/wallets/scans?address=…`.
+1. List scans: `GET …/wallets/scans?address=…` (or select scan in CPM UI — **US2**, **US12**).
 2. Load detail for selected `scan_id`.
-3. Explore: `POST …/policies/decisions/explore` with `policy_context`.
-4. Persist: `POST …/policies` with same `scan_id`.
+3. Explore: `POST …/policies/decisions/explore` with `scan_id`, `policy_context`, `selection_request`.
+4. Save platform draft: `POST …/drafts` (optional resume via `GET …/drafts?id=…`).
+5. Persist (EOA, CP-PERSIST V1): `POST …/wallet-challenges` → EIP-191 sign → `POST …/drafts/{draft_id}/persist` with `signed_message` + `signature` — not legacy `POST …/policies` without proof.
+
+See [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md) and CPM UI persist flow (**US8**, **US21**).
 
 ### Delete scan protected by policy (W3 / W4)
 
@@ -507,4 +591,5 @@ Wire event: `cafe.discovery.wallet.observed` v0.1 — see [03-cafe-developer-gui
 | [WORKPLAN_API.md](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) | Normative HTTP contract (maintainer) |
 | [IMMUTABILITE_PR.md](https://github.com/create2-labs/cafe-discovery/blob/main/IMMUTABILITE_PR.md) | Discovery immutability PR plan |
 | [api-v1-qa-checklist.md](./docs/api/api-v1-qa-checklist.md) | QA checklist |
+| [cafe-frontend CPM-specs-ui.md](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) | CPM UI user stories US1–US21 |
 | [cafe-deploy README — smoke scripts](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) | End-to-end test scripts |
