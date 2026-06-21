@@ -281,6 +281,7 @@ CPM_BASE='http://localhost:8082' \
 
 ## Related documents
 
+- [04-cafe-admin-guide.md](../../04-cafe-admin-guide.md) — CPM catalog administration and operator workflows
 - [Functional specifications — Explore (preview)](../../functional-specifications.md#explore-preview)
 - [Developer guide — Option A explore](../../03-cafe-developer-guide.md#option-a-explore-with-discovery-v1-policy_context)
 - [CPM v1 flow](../architecture/cpm-v1-flow.md)

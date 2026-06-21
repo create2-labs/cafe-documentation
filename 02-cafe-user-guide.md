@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.4.0
+  - Date: June 21st, 2026
+  - Comments: Document Platform Status version tiles including **CPM Version** (**CPM-UI-7A**).
 - v0.3.0
   - Date: Feb 26th, 2026
   - Comments: Documentation review and version/date update.
@@ -24,10 +27,11 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 4. [Wallet Scanning](#wallet-scanning)
 5. [TLS Endpoint Scanning](#tls-endpoint-scanning)
 6. [Viewing Scan Results](#viewing-scan-results)
-7. [Security Page](#security-page)
-8. [Settings and Plans](#settings-and-plans)
-9. [Wallet Management](#wallet-management)
-10. [Anonymous Mode](#anonymous-mode)
+7. [Platform Status](#platform-status)
+8. [Security Page](#security-page)
+9. [Settings and Plans](#settings-and-plans)
+10. [Wallet Management](#wallet-management)
+11. [Anonymous Mode](#anonymous-mode)
 
 ## Getting Started
 
@@ -307,6 +311,26 @@ Click on any scan result to view:
 - Risk score calculation
 - Security recommendations
 - CBOM (Cryptographic Bill of Materials)
+
+## Platform Status
+
+The Platform Status page is under **Platform → Status** (`/platform/status`). It shows whether the platform is operational and which service versions are deployed.
+
+### Platform health
+
+A status indicator shows whether core platform services are up. If the platform is down, contact your administrator or check deployment logs.
+
+### Version Information
+
+Three version tiles are shown (fetched at page load, not hard-coded in the app bundle):
+
+| Tile | Meaning |
+| --- | --- |
+| **Frontend Version** | The running SPA build (from `/version.json`) |
+| **Discovery Version** | The deployed Discovery backend image tag |
+| **CPM Version** | The deployed Crypto Policy Management service image tag |
+
+If a backend version cannot be reached, that tile shows **Unknown**. This helps confirm that Frontend, Discovery, and CPM builds match after a release or rollback.
 
 ## Security Page
 

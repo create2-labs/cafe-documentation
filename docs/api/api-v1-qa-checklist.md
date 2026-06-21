@@ -11,6 +11,12 @@ Use this checklist when reviewing API coherency docs, runbooks, scripts, and rel
 | CPM direct backend and edge business APIs | `/api/cpm/v1/...` |
 | CPM edge health | `/api/cpm/healthz` |
 | CPM direct health | `/healthz` |
+| Discovery edge version | `/api/version` |
+| Discovery direct version | `/version` on Discovery `:8080` |
+| CPM edge version | `/api/cpm/version` |
+| CPM direct version | `/version` on CPM `:8082` (dev) / `:8080` (compose) |
+
+Both version endpoints return `{"version":"<deploy-tag>"}` with no auth.
 
 ## Discovery Checks
 
@@ -28,6 +34,8 @@ Use this checklist when reviewing API coherency docs, runbooks, scripts, and rel
 - `POST /api/cpm/v1/policies/decisions/explore` is described as synchronous preview and non-persistent.
 - Explore may return HTTP **200** with empty selection and `rejected_candidates` (e.g. `incompatible.chain_scope`); ops runbook and IMM-OPS observability are documented in [CPM explore observability](../operations/cpm-explore-no-candidate-observability.md).
 - `GET /metrics` on CPM is documented as public application metrics (**IMM-OPS-1**).
+- CPM `GET /version` (direct) and `GET /api/cpm/version` (edge) are documented as public deploy version (**CPM-OPS-3**); same JSON contract as Discovery `/api/version`.
+- Platform Status docs mention Frontend, Discovery, and CPM version tiles (**CPM-UI-7A**).
 - `POST /api/cpm/v1/policies/assessment/request` is described as the async assessment trigger.
 - Assessment request is wallet-scan only.
 - Assessment request rejects client `policy_context`.

@@ -63,6 +63,7 @@ Every CPM route must be explicitly classified. No unclassified CPM business rout
 | Route | Method | Classification | Expected access |
 | --- | --- | --- | --- |
 | `/healthz` | `GET` | Public health/readiness | Anonymous allowed |
+| `/version` | `GET` | Public deploy version (**CPM-OPS-3**) | Anonymous allowed; `{"version":"…"}`; edge `GET /api/cpm/version` |
 | `/metrics` | `GET` | Public metrics (IMM-OPS-1) | Anonymous allowed; CPM application Prometheus registry |
 | `/api/cpm/v1/policies/catalog` | `GET` | Authenticated business endpoint | Discovery session required |
 | `/api/cpm/v1/policies/templates` | `GET` | Authenticated business endpoint | Discovery session required |
@@ -236,6 +237,7 @@ The dev stack must wire CPM auth, session validation, and scan authorization env
 Required dev e2e cases:
 
 - CPM `/healthz` is public.
+- CPM `/version` is public; edge route `/api/cpm/version` mirrors Discovery `/api/version`.
 - Anonymous `/api/cpm/v1` business route returns `401`.
 - Invalid token returns `401`.
 - Valid Discovery token succeeds.

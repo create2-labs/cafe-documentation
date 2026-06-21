@@ -45,6 +45,7 @@
       6. [Remediation (product direction)](#remediation-product-direction)
       7. [Governance — scan immutability and CPM coupling](#governance--scan-immutability-and-cpm-coupling)
       8. [Platform observability — CPM explore (REQ9)](#platform-observability--cpm-explore-no-deployable-candidate-req9)
+      9. [Platform Status — deployed service versions (US18)](#platform-status--deployed-service-versions-us18)
    6. [Data structures](#data-structures)
       1. [Scan list item (wallet)](#scan-list-item-wallet)
       2. [Scan detail (wallet)](#scan-detail-wallet)
@@ -275,6 +276,7 @@ States: `requested` → `started` → `completed` | `failed` (or `requested` →
 #### Read catalog
 
 - **`GET /api/cpm/v1/policies/catalog`**, **`/templates`**, **`/instances`** — authenticated.
+- Static catalog files are loaded at CPM startup; administration (add template, widen chain scope) is documented in [04-cafe-admin-guide.md](./04-cafe-admin-guide.md#cpm-catalog-administration).
 
 #### Explore (preview)
 
@@ -381,6 +383,24 @@ This signal helps product and ops detect coverage gaps, misconfigured catalogs, 
 - Admin UI in `cafe-frontend` (deferred **IMM-OPS-3**).
 
 **Technical detail:** [technical-specifications.md — IMM-OPS](./technical-specifications.md#explore-no-deployable-candidate-observability-imm-ops-12) · [operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md)
+
+### Platform Status — deployed service versions (US18)
+
+Authenticated users can confirm which **deployed builds** are running from **Platform → Status** → **Version Information**.
+
+| Tile | Source | Notes |
+| --- | --- | --- |
+| Frontend Version | Static `/version.json` (baked at image build) | SPA bundle tag |
+| Discovery Version | `GET /api/version` → Discovery `GET /version` | Image tag from `APP_VERSION` |
+| CPM Version | `GET /api/cpm/version` → CPM `GET /version` (**CPM-OPS-3**) | Same JSON contract as Discovery; **CPM-UI-7A** |
+
+**Acceptance:**
+
+- Versions are read at runtime (not hard-coded in the frontend).
+- Loading/error UX matches existing tiles (`Unknown` when unreachable).
+- CPM graph and policy workflows are unchanged.
+
+**Out of scope:** catalog `catalog_version`, template `version` fields, or CPM policy instance metadata.
 
 ---
 

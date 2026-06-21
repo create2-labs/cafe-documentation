@@ -8,9 +8,11 @@
 4. [Public HTTP API](#public-http-api)
 5. [Discovery service](#discovery-service)
 6. [CPM service](#cpm-service)
-   1. [Explore no-deployable-candidate observability (IMM-OPS-1…2)](#explore-no-deployable-candidate-observability-imm-ops-12)
+   1. [Deploy version endpoint (CPM-OPS-3)](#deploy-version-endpoint-cpm-ops-3)
+   2. [Explore no-deployable-candidate observability (IMM-OPS-1…2)](#explore-no-deployable-candidate-observability-imm-ops-12)
 7. [Frontend](#frontend)
-   1. [Explore rejection UX (REQ8 / FE-IMM-13)](#explore-rejection-ux-req8--fe-imm-13)
+   1. [Platform Status versions (CPM-UI-7A)](#platform-status-versions-cpm-ui-7a)
+   2. [Explore rejection UX (REQ8 / FE-IMM-13)](#explore-rejection-ux-req8--fe-imm-13)
 8. [Infrastructure and deployment](#infrastructure-and-deployment)
 9. [Data storage](#data-storage)
 10. [Messaging and scan pipeline](#messaging-and-scan-pipeline)
@@ -107,6 +109,15 @@ Canonical path prefixes (edge):
 | Discovery | `/api/discovery/v1` |
 | CPM | `/api/cpm/v1` |
 
+**Public deploy version** (outside v1 prefixes, no auth):
+
+| Service | Edge | Direct (dev) | Body |
+| --- | --- | --- | --- |
+| Discovery | `GET /api/version` | `GET :8080/version` | `{"version":"…"}` |
+| CPM | `GET /api/cpm/version` | `GET :8082/version` | `{"version":"…"}` |
+
+NGINX templates and contract guards: `cafe-deploy` (**CPM-OPS-3**, Discovery **DISC-OPS-1**).
+
 **Route registration order (Discovery):** register `…/wallets/scans` and `…/wallets/scans/{scan_id}` **before** `…/wallets/{wallet_id}` so `scans` is not captured as a wallet id.
 
 Non-canonical public URLs must return **404** at the edge; regression checks live in `cafe-deploy/scripts/lib/discovery-v1-http-smoke.sh`.
@@ -188,9 +199,18 @@ Gap analysis and migration: [`cafe-discovery/docs/SCAN_IMMUTABILITY_MIGRATION.md
 
 Integrated narrative: [`cafe-crypto-policy-mgt/docs/CPM_OPTION_A_INTEGRATED.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CPM_OPTION_A_INTEGRATED.md).
 
+### Deploy version endpoint (CPM-OPS-3)
+
+| Endpoint | Auth | Purpose |
+| --- | --- | --- |
+| `GET /version` | Public | Running CPM image tag (`internal/version`, `APP_VERSION` at build) |
+| Edge `GET /api/cpm/version` | Public | Same handler via NGINX → `cafe-cpm:8080/version` |
+
+Contract matches Discovery `GET /version` / `GET /api/version`. Consumed by Platform Status (**CPM-UI-7A**) through `platformService.getCpmVersion()`.
+
 ### Explore no-deployable-candidate observability (IMM-OPS-1…2)
 
-When explore returns HTTP **200** with empty selection and non-empty `rejected_candidates`, CPM emits **one** structured log and **one** Prometheus increment per qualifying event (dominant `rejection_code` only — not one increment per rejection reason). Admin `curl` workflow and diagnosis checklist: [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md).
+When explore returns HTTP **200** with empty selection and non-empty `rejected_candidates`, CPM emits **one** structured log and **one** Prometheus increment per qualifying event (dominant `rejection_code` only — not one increment per rejection reason). Admin `curl` workflow and diagnosis checklist: [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md). Catalog configuration: [04-cafe-admin-guide.md](./04-cafe-admin-guide.md#cpm-catalog-administration).
 
 | Component | Artifact |
 | --- | --- |
@@ -252,6 +272,15 @@ Emitted once per qualifying explore. Investigable fields (non-exhaustive):
 - Consumes `/api/discovery/v1` and `/api/cpm/v1` through edge.
 - **Option A flow:** scan selector → detail → `policy_context` → explore → backend draft → wallet-challenges → sign → `drafts/{draft_id}/persist` (CP-PERSIST V1).
 - **Scan immutability UX (FE-IMM-0…14):** W1 rescan guards, orphan draft rebind (**FE-IMM-4**), W7/W2 scan selection, DELETE policy/scan, P1 quota breakdown, data-integrity mappers — see [`IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md) and [`IMMUTABILITE_PR.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE_PR.md).
+
+### Platform Status versions (CPM-UI-7A)
+
+**Platform → Status** (`PlatformStatusContent.vue`) shows:
+
+- Platform health (Prometheus `platform_up` via `/status`)
+- **Version Information:** Frontend (`/version.json`), Discovery (`/api/version`), CPM (`/api/cpm/version`)
+
+Service layer: `platformService.getBackendVersion()`, `platformService.getCpmVersion()`. Unreachable backends display **Unknown** (same UX as Discovery).
 
 ### Explore rejection UX (REQ8 / FE-IMM-13)
 
@@ -381,6 +410,7 @@ cd cafe-deploy/scripts
 | --- | --- |
 | [functional-specifications.md](./functional-specifications.md) | Product behavior |
 | [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) | curl examples, paths |
+| [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) | Platform admin: catalog, deploy, observability |
 | [WORKPLAN_API.md](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) | Normative API workplan |
 | [cafe-discovery README](https://github.com/create2-labs/cafe-discovery/blob/main/README.md) | Service operations |
 | [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) | Deploy and scripts |

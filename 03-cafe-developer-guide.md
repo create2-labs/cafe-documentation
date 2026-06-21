@@ -4,6 +4,9 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.11.0
+  - Date: June 21st, 2026
+  - Comments: Document public service version endpoints (`GET /api/version`, `GET /api/cpm/version`) and Platform Status CPM version tile (**CPM-OPS-3** / **CPM-UI-7A**).
 - v0.10.0
   - Date: June 9th, 2026
   - Comments: Document explore **no deployable candidate** (HTTP 200 + `rejected_candidates`), chain-scope all-or-nothing diagnosis, and pointers to platform observability (**IMM-OPS-1…2**) and admin `curl` workflow — see [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md).
@@ -75,6 +78,24 @@ The token is an opaque Bearer value for callers. The frontend and CPM both reuse
 
 Technical endpoints such as `GET /health`, `GET /metrics`, and internal `/internal/*` routes are not part of this public v1 product surface. `/plans` remains a separate account/quota API and is not versioned under Discovery v1 by this rollout.
 
+### Service version (deploy observability)
+
+Discovery and CPM each expose a **public** deploy-time version JSON contract (no auth). The frontend Platform Status page reads these at runtime (**CPM-UI-7A**).
+
+| Service | Direct path | Edge path | Response |
+| --- | --- | --- | --- |
+| Discovery | `GET /version` on `:8080` | `GET /api/version` | `{"version": "<image-tag>"}` |
+| CPM | `GET /version` on `:8082` (dev) / `:8080` (compose) | `GET /api/cpm/version` | `{"version": "<image-tag>"}` |
+
+```bash
+curl -fsS "${DISCOVERY_BASE}/version" | jq .
+curl -fsS "${CPM_BASE}/version" | jq .
+curl -kfsS "${EDGE_BASE}/api/version" | jq .
+curl -kfsS "${EDGE_BASE}/api/cpm/version" | jq .
+```
+
+Version strings come from the image build (`APP_VERSION` / Git tag). They are **not** catalog `catalog_version` fields.
+
 ### CPM v1
 
 | Purpose | Direct or edge path | Auth |
@@ -89,6 +110,7 @@ Technical endpoints such as `GET /health`, `GET /metrics`, and internal `/intern
 | Drafts | `/api/cpm/v1/drafts` | Bearer |
 | Async policy assessment request | `POST /api/cpm/v1/policies/assessment/request` | Bearer |
 | Health | `GET /healthz` direct, `GET /api/cpm/healthz` at edge | Public |
+| Deployed version | `GET /version` direct, `GET /api/cpm/version` at edge | Public |
 
 ## Discovery Workflows
 
@@ -298,7 +320,8 @@ The normative shared vocabulary lives in `cafe-contracts` under `observation/wal
 Use this checklist before opening or merging API coherency documentation changes.
 
 - Discovery examples use `/discovery/v1` direct paths or `/api/discovery/v1` edge paths.
-- CPM examples use `/api/cpm/v1`, except health at `/healthz` direct or `/api/cpm/healthz` at the edge.
+- CPM examples use `/api/cpm/v1`, except health at `/healthz` direct or `/api/cpm/healthz` at the edge, and version at `/version` direct or `/api/cpm/version` at the edge.
+- Discovery deploy version uses `/version` direct or `/api/version` at the edge (`{"version":"…"}`).
 - Scan examples use `scan_id`, `status: requested`, and `location` from `POST /discovery/v1/scan`.
 - Scan list examples expect `items`, not `results`, for v1 list envelopes.
 - Wallet and TLS detail examples fetch `.../scans/{scan_id}` and read `result`.
@@ -312,3 +335,4 @@ Use this checklist before opening or merging API coherency documentation changes
 - `cafe-crypto-policy-mgt/openapi/cpm-v1.yaml` for the CPM v1 contract.
 - `docs/security/cpm-auth-only-contract.md` for CPM authentication, scan authorization, service-token, and troubleshooting details.
 - `docs/api/api-v1-qa-checklist.md` for a compact reviewer checklist.
+- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) for platform administration (deploy, CPM catalog, observability).
