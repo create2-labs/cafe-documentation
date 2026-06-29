@@ -6,6 +6,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 ## Document Versioning
 
+- v0.3.0
+  - Date: June 27th, 2026
+  - Comments: PostgreSQL retention and capacity — soft-delete growth, monitoring queries, operator remediation (no automated purge in P0).
 - v0.2.0
   - Date: June 21st, 2026
   - Comments: Document CPM deploy version endpoint (`GET /api/cpm/version`, **CPM-OPS-3**) and Platform Status version tile (**CPM-UI-7A**).
@@ -33,22 +36,27 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
       1. [Quick probes (dev)](#quick-probes-dev)
       2. [Compose status](#compose-status)
       3. [Prometheus / Grafana (IMM-OPS-2)](#prometheus--grafana-imm-ops-2)
-   7. [Authentication and internal tokens (operator view)](#authentication-and-internal-tokens-operator-view)
-   8. [CPM catalog administration](#cpm-catalog-administration)
+   7. [PostgreSQL retention and capacity](#postgresql-retention-and-capacity)
+      1. [Why the database grows](#why-the-database-grows)
+      2. [Monitor size and row pressure](#monitor-size-and-row-pressure)
+      3. [Operator response (today)](#operator-response-today)
+      4. [Constraints before any purge](#constraints-before-any-purge)
+   8. [Authentication and internal tokens (operator view)](#authentication-and-internal-tokens-operator-view)
+   9. [CPM catalog administration](#cpm-catalog-administration)
       1. [Three layers (must stay consistent)](#three-layers-must-stay-consistent)
       2. [Source files (repository)](#source-files-repository)
       3. [Environment variables](#environment-variables)
       4. [Procedure: add a second Crypto Policy](#procedure-add-a-second-crypto-policy)
       5. [Common catalog mistakes](#common-catalog-mistakes)
       6. [Persisted policies vs catalog](#persisted-policies-vs-catalog)
-   9. [Observability and incidents](#observability-and-incidents)
-      1. [CPM explore — no deployable candidate (REQ9)](#cpm-explore--no-deployable-candidate-req9)
-      2. [Integrated smoke (Discovery → CPM)](#integrated-smoke-discovery--cpm)
-   10. [Diagnose CPM explore (operator `curl`)](#diagnose-cpm-explore-operator-curl)
-   11. [User-support scenarios](#user-support-scenarios)
-   12. [Secrets and compliance](#secrets-and-compliance)
-   13. [Verification checklist (after catalog or CPM deploy)](#verification-checklist-after-catalog-or-cpm-deploy)
-   14. [Additional resources](#additional-resources)
+   10. [Observability and incidents](#observability-and-incidents)
+       1. [CPM explore — no deployable candidate (REQ9)](#cpm-explore--no-deployable-candidate-req9)
+       2. [Integrated smoke (Discovery → CPM)](#integrated-smoke-discovery--cpm)
+   11. [Diagnose CPM explore (operator `curl`)](#diagnose-cpm-explore-operator-curl)
+   12. [User-support scenarios](#user-support-scenarios)
+   13. [Secrets and compliance](#secrets-and-compliance)
+   14. [Verification checklist (after catalog or CPM deploy)](#verification-checklist-after-catalog-or-cpm-deploy)
+   15. [Additional resources](#additional-resources)
 
 ---
 
@@ -60,6 +68,7 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 | HTTP API integration (`curl`, payloads) | Minimal (diagnosis only) | [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) |
 | CPM auth contract, error codes | Pointers | [docs/security/cpm-contract.md](./docs/security/cpm-contract.md) |
 | Explore rejection observability | Pointers + checklist | [docs/operations/cpm-explore-no-candidate-observability.md](./docs/operations/cpm-explore-no-candidate-observability.md) |
+| PostgreSQL retention, soft-delete growth, capacity | Monitoring + remediation | This guide § [PostgreSQL retention and capacity](#postgresql-retention-and-capacity) |
 | Product rules (W1–W8, immutability) | Summary | [functional-specifications.md](./functional-specifications.md) |
 
 **Out of scope:** application feature development, Terraform/Ansible authoring (see cafe-deploy), and future admin product UI (**IMM-OPS-3**).
@@ -176,6 +185,139 @@ Smoke:
 ./scripts/test-imm-ops-2.sh static    # config files
 ./scripts/test-imm-ops-2.sh live      # against running stack
 ```
+
+---
+
+## PostgreSQL retention and capacity
+
+CAFE stores durable scan and Crypto Policy (CP) state in a single **PostgreSQL** instance (`cafe-postgres-${ENV}` in compose). **There is no automated compaction job in P0** — operators must plan for monotonic growth and monitor disk and backup size.
+
+Product intent ([functional-specifications.md — Retention](./functional-specifications.md#retention)): scan rows and policies remain until the user deletes them or deletes their account. User-initiated `DELETE` is implemented as **soft delete** (`deleted_at` set); rows stay in the database. That is correct for product semantics but increases **row count**, **on-disk size**, and **backup volume** over time.
+
+### Why the database grows
+
+| Source | Tables | Behavior |
+| --- | --- | --- |
+| User delete (scan / draft / policy) | `scan_results`, `tls_scan_results`, `crypto_policy_drafts`, `crypto_policies` | Row kept with `deleted_at` set — hidden from API lists and W1/W3 guards (partial indexes `WHERE deleted_at IS NULL`) |
+| Policy replacement | `crypto_policies` | Previous row becomes `status = superseded` (still stored; not a soft delete) |
+| Persist idempotence | `draft_persist_state` | After successful persist the draft is hard-deleted, but the state row remains (`completed = true`) so `409 DRAFT_ALREADY_PERSISTED` replays work |
+| Plan quota ledger (IMM-6b) | `scan_usage_events` | **Append-only** — `used` is monotonic; soft-deleting a scan lowers `visible` but **does not** remove ledger rows |
+
+Hot queries stay fast thanks to partial indexes, but **disk and backups grow without bound** until a retention or purge policy is applied. Acceptable for P0/dev; track before long-lived staging or production scale.
+
+Further schema context: [cafe-persistence README — CP tables](https://github.com/create2-labs/cafe-persistence/blob/main/README.md#pourquoi-trois-tables), [RUNBOOK_CP_PERSISTENCE.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_CP_PERSISTENCE.md).
+
+### Monitor size and row pressure
+
+Set `ENV` to your stack (`dev`, `staging`, `prod`). Default Postgres container: `cafe-postgres-${ENV}`; credentials from `POSTGRES_*` in the env file (`cafe` / `cafe` in dev templates).
+
+**Database and table sizes:**
+
+```bash
+export ENV=dev
+export POSTGRES_CONTAINER="cafe-postgres-${ENV}"
+export POSTGRES_USER=cafe POSTGRES_PASSWORD=cafe POSTGRES_DATABASE=cafe
+
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$POSTGRES_CONTAINER" \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -c "
+SELECT pg_size_pretty(pg_database_size(current_database())) AS database_size;
+
+SELECT relname AS table_name,
+       pg_size_pretty(pg_total_relation_size(relid)) AS total_size,
+       n_live_tup AS live_rows,
+       n_dead_tup AS dead_rows
+FROM pg_stat_user_tables
+WHERE schemaname = 'public'
+  AND relname IN (
+    'scan_results', 'tls_scan_results',
+    'crypto_policy_drafts', 'crypto_policies', 'draft_persist_state',
+    'scan_usage_events'
+  )
+ORDER BY pg_total_relation_size(relid) DESC;"
+```
+
+**Active vs soft-deleted / superseded row counts:**
+
+```bash
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$POSTGRES_CONTAINER" \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -c "
+SELECT 'scan_results' AS tbl,
+       COUNT(*) FILTER (WHERE deleted_at IS NULL) AS active,
+       COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) AS soft_deleted
+FROM scan_results
+UNION ALL
+SELECT 'tls_scan_results', COUNT(*) FILTER (WHERE deleted_at IS NULL),
+       COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) FROM tls_scan_results
+UNION ALL
+SELECT 'crypto_policy_drafts', COUNT(*) FILTER (WHERE deleted_at IS NULL),
+       COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) FROM crypto_policy_drafts
+UNION ALL
+SELECT 'crypto_policies (persisted)', COUNT(*) FILTER (WHERE status = 'persisted' AND deleted_at IS NULL),
+       COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) FROM crypto_policies
+UNION ALL
+SELECT 'crypto_policies (superseded)', COUNT(*) FILTER (WHERE status = 'superseded' AND deleted_at IS NULL), 0
+FROM crypto_policies
+UNION ALL
+SELECT 'draft_persist_state (completed)', COUNT(*) FILTER (WHERE completed), 0 FROM draft_persist_state
+UNION ALL
+SELECT 'scan_usage_events', COUNT(*), 0 FROM scan_usage_events;"
+```
+
+**Suggested cadence:** weekly in staging/prod (or after large test campaigns). Alert informally when `database_size` or `soft_deleted` + `superseded` counts trend up faster than disk budget. Future work: Prometheus on `pg_total_relation_size` (see [cafe-deploy TODO — Postgres retention](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md#postgres-retention--cp--scan-tables-grow-without-bound-soft-delete)).
+
+**Compose volume:** also check the Postgres Docker volume / host mount size (`docker system df -v` or cloud disk metrics).
+
+### Operator response (today)
+
+| Situation | Action |
+| --- | --- |
+| Approaching disk limit | Expand volume; shorten backup retention if policy allows; run monitoring queries above to find dominant tables |
+| High `dead_rows` after bulk activity | `VACUUM (ANALYZE)` on affected tables during a maintenance window (reclaims space from updated/deleted tuples; does not remove soft-deleted business rows) |
+| Staging / dev cleanup of test data | **Hard-delete** old soft-deleted rows only after dry-run `SELECT` and sign-off — see constraints below. **Never** ad-hoc purge in production without product/legal approval |
+| No automated purge yet | Planned: retention windows, scheduled job, account-deletion cascade (RGPD). Track [cafe-deploy TODO — Postgres retention](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md#postgres-retention--cp--scan-tables-grow-without-bound-soft-delete) |
+
+**Staging-only example** — preview rows eligible for hard-delete (adjust interval and environment):
+
+```sql
+-- Dry run: soft-deleted CP rows older than 90 days
+SELECT id, deleted_at FROM crypto_policy_drafts
+WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days';
+
+SELECT id, status, deleted_at FROM crypto_policies
+WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days';
+
+-- Dry run: superseded policies older than 90 days (still visible to DB, not to users)
+SELECT id, scan_id, persisted_at FROM crypto_policies
+WHERE status = 'superseded' AND deleted_at IS NULL
+  AND persisted_at < NOW() - INTERVAL '90 days';
+```
+
+After an approved hard-delete in staging:
+
+```sql
+-- Example — execute only after dry-run counts match expectation
+DELETE FROM crypto_policy_drafts
+WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days';
+
+DELETE FROM crypto_policies
+WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days';
+
+-- Optional: completed persist state older than N days (409 replay is immediate-only in practice)
+DELETE FROM draft_persist_state
+WHERE completed = true AND persisted_at < NOW() - INTERVAL '90 days';
+
+VACUUM (ANALYZE) crypto_policy_drafts, crypto_policies, draft_persist_state;
+```
+
+Do **not** bulk-delete from `scan_usage_events` to “free space” — that breaks **IMM-6b** monotonic `used` semantics unless coordinated with a contract change.
+
+### Constraints before any purge
+
+- **W1 / W3:** guards count only active (`deleted_at IS NULL`) persisted policies — hard-deleting already soft-deleted rows is safe; hard-deleting **active** rows is not.
+- **IMM-6b:** `scan_usage_events` is append-only; purging it changes plan `used` accounting.
+- **`draft_persist_state`:** removing recent `completed` rows can weaken `409 DRAFT_ALREADY_PERSISTED` replay behavior for in-flight clients.
+- **Backups:** smaller live DB does not shrink existing backup objects — align backup retention with legal/audit policy.
+- **Production:** no documented automated purge path yet — coordinate with product and `cafe-persistence` before any hard-delete policy.
 
 ---
 
@@ -467,3 +609,5 @@ Admins do **not** mutate user drafts or persisted policies through catalog files
 - [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md)
 - [CPM auth contract](./docs/security/cpm-contract.md)
 - [CP-PERSIST V1](./docs/security/cp-persist-v1.md)
+- [RUNBOOK_CP_PERSISTENCE](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_CP_PERSISTENCE.md) — durable CP via cafe-persistence
+- [cafe-deploy TODO — Postgres retention](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md#postgres-retention--cp--scan-tables-grow-without-bound-soft-delete) — planned compaction work

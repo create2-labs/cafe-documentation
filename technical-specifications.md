@@ -33,7 +33,7 @@ This document describes **how CAFE is built and operated**: services, APIs, pers
 | Area | Technology / pattern |
 | --- | --- |
 | Discovery API | Go (Fiber), OpenAPI v1, PostgreSQL, Redis cache, NATS events |
-| CPM API | Go, owner-scoped persistence, JWT from Discovery |
+| CPM API | Go, durable CP via HTTP → cafe-persistence → **Postgres only** (P0; no Redis CP cache), JWT from Discovery |
 | Scanners | Separate worker images (wallet EVM, TLS) |
 | Frontend | Web SPA (React), Bearer session to Discovery/CPM |
 | Edge | NGINX (or equivalent) — `/api/discovery/v1`, `/api/cpm/v1` |
@@ -152,8 +152,16 @@ Gap analysis and migration: [`cafe-discovery/docs/SCAN_IMMUTABILITY_MIGRATION.md
 
 ### Redis
 
-- Accelerator / cache only after immutability rollout; **Postgres is source of truth** for v1 list/detail.
+Redis is used for **scan** acceleration only — not for durable crypto policies (CP).
+
+| Domain | Postgres | Redis (P0) |
+| --- | --- | --- |
+| **Wallet/TLS scans** | Source of truth (`scan_results`, `tls_scan_results`) | Optional accelerator: result cache (`wallet:user:…`, `tls:user:…`), pending v1 keys; v1 list/detail authoritative in Postgres |
+| **Crypto policies (CP)** | Source of truth (`crypto_policy_drafts`, `crypto_policies`, `draft_persist_state`) | **Not used** — CPM and Discovery W1/W3 call cafe-persistence `internal/cp/v1` → Postgres only |
+
 - Delete wallet scan: evict Redis address key only when **no** remaining Postgres rows for that address.
+- Optional Redis CP cache (`cpm:v1:…`) is **P1+** only (ADR §8.2); never replaces Postgres.
+- CP-PERSIST V1 wallet challenges are stateless (no Redis proof store) — see [cp-persist-v1.md](./docs/security/cp-persist-v1.md).
 
 ### Error codes (representative)
 
@@ -183,7 +191,7 @@ Gap analysis and migration: [`cafe-discovery/docs/SCAN_IMMUTABILITY_MIGRATION.md
 | `internal/api/` | HTTP handlers (read, explore, persist); explore observability hook (**IMM-OPS-1**) |
 | `internal/metrics/` | Prometheus registry; `cpm_explore_no_deployable_candidate_total` |
 | `internal/domain/policy/` | Policy models and evaluation |
-| `internal/persistence/` | Owner-scoped store |
+| `internal/persistence/cphttp/` | HTTP client to cafe-persistence `internal/cp/v1` (`CPM_STORE=persistence`; no direct Postgres/Redis) |
 
 ### Guard implementation notes
 
