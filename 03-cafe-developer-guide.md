@@ -4,6 +4,9 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.13.0
+  - Date: July 21st, 2026
+  - Comments: Document dual local deployments — **cafe-deploy** (Docker Compose) and **cafe-expresso** (minikube); edge UI/API via `http://localhost:8080` on minikube; signup/signin through ingress (not frontend-only port-forward).
 - v0.12.0
   - Date: June 21st, 2026
   - Comments: Align CPM persist table with CP-PERSIST V1 (`wallet-challenges`, `drafts/{id}/persist`); reference CPM UI user stories **US1–US21** / [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md).
@@ -26,29 +29,103 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
   - Date: Apr 19th, 2026
   - Comments: Documented the Discovery -> CPM normalized wallet observation contract (`cafe.discovery.wallet.observed` v0.1).
 
+## Local deployments (Compose and minikube)
+
+CAFE currently supports **two parallel local deployments**. Both stay documented; Compose is not removed while minikube P0 matures.
+
+| Deployment | Repository | Edge (browser UI + `/api`) | Notes |
+| --- | --- | --- | --- |
+| **Docker Compose** | [`cafe-deploy`](https://github.com/create2-labs/cafe-deploy) | `https://localhost` (NGINX) or `http://localhost` | Classic VM/dev stack; env files + `docker compose` |
+| **minikube (P0)** | [`cafe-expresso`](https://github.com/create2-labs/cafe-expresso) | **`http://localhost:8080`** via ingress-nginx port-forward | Helm chart `cafe-platform`; kubectl/Helm ops in [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md) |
+
+Architecture / backlog: [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md). Operator kubectl cheat-sheet: [cafe-expresso `docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md). Admin day-2: [04-cafe-admin-guide.md](./04-cafe-admin-guide.md).
+
+### minikube — necessary and sufficient edge access
+
+On Mac + docker driver, do **not** rely on `minikube ip`. Forward the **ingress controller** (not `svc/cafe-frontend` alone — that nginx is SPA-only and returns **405** on `POST /api/...`):
+
+```bash
+export NS=cafe-platform
+minikube addons enable ingress   # once
+kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8080:80
+```
+
+Then:
+
+| Use | URL |
+| --- | --- |
+| Signup / Signin (browser) | **`http://localhost:8080/signup`** / **`http://localhost:8080/signin`** |
+| SPA home | `http://localhost:8080/` |
+| Edge API (Discovery) | `http://localhost:8080/api/...` (e.g. `/api/auth/signup`, `/api/discovery/v1/...`) |
+| Edge API (CPM) | `http://localhost:8080/api/cpm/v1/...` |
+
+HTTPS on minikube P0 is **not** configured (TLS/cert-manager → staging). Use **HTTP** on `:8080`.
+
+### minikube — deploy + secrets (from `k8s.md`)
+
+```bash
+cd cafe-expresso
+export NS=cafe-platform
+minikube start --memory=8192 --cpus=4 --driver=docker   # prefer --cni=calico for NetworkPolicies (PR6+)
+kubectl cluster-info
+
+helm upgrade --install cafe-platform charts/cafe-platform \
+  --namespace "$NS" --create-namespace \
+  -f charts/cafe-platform/values.yaml \
+  -f charts/cafe-platform/values-minikube.yaml
+
+kubectl -n "$NS" create secret generic cafe-platform-secrets \
+  --from-literal=JWT_SECRET=dev-not-secret \
+  --from-literal=POSTGRES_PASSWORD=cafe \
+  --from-literal=CAFE_PERSISTENCE_SERVICE_TOKEN=dev-cafe-auth06-shared-internal-token \
+  --from-literal=DISCOVERY_INTERNAL_AUTHZ_SERVICE_TOKEN=dev-cafe-auth06-shared-internal-token \
+  --from-literal=CAFE_SESSION_JWT_VALIDATION_SERVICE_TOKEN=dev-cafe-auth06-shared-internal-token \
+  --from-literal=CAFE_SCAN_AUTHORIZATION_SERVICE_TOKEN=dev-cafe-auth06-shared-internal-token \
+  --from-literal=MORALIS_API_KEY= \
+  --from-literal=TURNSTILE_SECRET_KEY= \
+  --from-literal=TURNSTILE_SITE_KEY= \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+./scripts/smoke/smoke-minikube.sh   # optional full smoke
+```
+
+Empty `TURNSTILE_*` is valid in dev: the UI uses Cloudflare always-pass keys (`XXXX.DUMMY.TOKEN.XXXX`); Discovery accepts any non-empty token when the secret key is empty. Scripts may send `"turnstile_token":"dev-pass"`.
+
 ## Base URLs
 
 Use one of these bases depending on where the caller runs.
 
 | Context | Discovery base | CPM base | Notes |
 | --- | --- | --- | --- |
-| Direct local services | `http://localhost:8080` | `http://localhost:8082` | Use backend paths exactly as registered by each service. |
-| Edge / NGINX | `https://<host>/api` | `https://<host>` | Discovery is reached as `/api/discovery/v1/...`; CPM is reached as `/api/cpm/v1/...`. |
+| Direct local services (Compose ports or kubectl port-forward to pods) | `http://localhost:8080` | `http://localhost:8082` | Backend paths exactly as registered by each service (`/auth/...`, `/discovery/v1/...`, `/api/cpm/v1/...` on CPM). |
+| **Edge — cafe-deploy NGINX** | `https://<host>/api` | `https://<host>` | Discovery `/api/discovery/v1/...`; CPM `/api/cpm/v1/...`. Local often `https://localhost`. |
+| **Edge — cafe-expresso minikube** | `http://localhost:8080/api` | `http://localhost:8080` | After ingress port-forward `8080:80`. **Signup/signin UI:** `http://localhost:8080`. No TLS on P0. |
 
 Examples below use:
 
 ```bash
+# Direct Discovery (Compose published port, or: kubectl -n cafe-platform port-forward svc/cafe-discovery-backend 8080:8080)
 export DISCOVERY_BASE="http://localhost:8080"
-export EDGE_API_BASE="https://localhost/api"
 export CPM_BASE="http://localhost:8082"
+
+# Edge — Compose NGINX (HTTPS, may need -k)
+export EDGE_API_BASE="https://localhost/api"
 export EDGE_BASE="https://localhost"
+
+# Edge — minikube (HTTP via ingress port-forward) — preferred for browser + /api on K8s
+export EDGE_BASE="http://localhost:8080"
+export EDGE_API_BASE="http://localhost:8080/api"
 ```
 
-For development HTTPS with a self-signed or private CA, add `-k` to `curl` only in local/dev contexts.
+For development HTTPS with a self-signed or private CA on **Compose**, add `-k` to `curl` only in local/dev contexts. On **minikube P0**, prefer plain HTTP on `:8080`.
 
 ## Authentication
 
 Most Discovery and CPM business endpoints require a Discovery-issued session token.
+
+**Browser (minikube):** open **`http://localhost:8080/signup`** or **`http://localhost:8080/signin`** (ingress port-forward must be running).
+
+**curl — direct Discovery** (Compose or port-forward to `cafe-discovery-backend`):
 
 ```bash
 JWT=$(curl -s -X POST "${DISCOVERY_BASE}/auth/signin" \
@@ -56,8 +133,31 @@ JWT=$(curl -s -X POST "${DISCOVERY_BASE}/auth/signin" \
   -d '{
     "email": "user@example.com",
     "password": "password",
-    "turnstile_token": "dev"
+    "turnstile_token": "dev-pass"
   }' | jq -r '.token')
+```
+
+**curl — edge on minikube** (same host as the SPA):
+
+```bash
+export EDGE_BASE="http://localhost:8080"
+JWT=$(curl -s -X POST "${EDGE_BASE}/api/auth/signin" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password",
+    "turnstile_token": "dev-pass"
+  }' | jq -r '.token')
+
+# Signup (create account)
+curl -s -X POST "${EDGE_BASE}/api/auth/signup" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password",
+    "confirm_password": "password",
+    "turnstile_token": "dev-pass"
+  }' | jq .
 ```
 
 The token is an opaque Bearer value for callers. The frontend and CPM both reuse the Discovery session token; CPM does not issue a separate user JWT.
@@ -340,4 +440,6 @@ Use this checklist before opening or merging API coherency documentation changes
 - `cafe-crypto-policy-mgt/openapi/cpm-v1.yaml` for the CPM v1 contract.
 - `docs/security/cpm-auth-only-contract.md` for CPM authentication, scan authorization, service-token, and troubleshooting details.
 - `docs/api/api-v1-qa-checklist.md` for a compact reviewer checklist.
-- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) for platform administration (deploy, CPM catalog, observability).
+- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) for platform administration (deploy Compose + minikube, CPM catalog, observability).
+- [cafe-deploy](https://github.com/create2-labs/cafe-deploy) — Docker Compose deployment (still supported).
+- [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube / Helm / Argo CD; operator tutorial [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md).

@@ -6,6 +6,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 ## Document Versioning
 
+- v0.4.0
+  - Date: July 21st, 2026
+  - Comments: Dual local deployments — keep **cafe-deploy** (Compose) and add **cafe-expresso** (minikube): Helm deploy, ingress edge at `http://localhost:8080`, signup/signin, pgweb, probes; commands aligned with cafe-expresso `docs/k8s.md`.
 - v0.3.0
   - Date: June 27th, 2026
   - Comments: PostgreSQL retention and capacity — soft-delete growth, monitoring queries, operator remediation (no automated purge in P0).
@@ -24,23 +27,28 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
    2. [ToC](#toc)
    3. [Admin scope](#admin-scope)
    4. [Environments and access](#environments-and-access)
-      1. [Typical bases](#typical-bases)
-      2. [SSH tunnel (non-public stacks)](#ssh-tunnel-non-public-stacks)
-      3. [Environment files](#environment-files)
+      1. [Two local deployments](#two-local-deployments)
+      2. [Typical bases](#typical-bases)
+      3. [SSH tunnel (non-public stacks)](#ssh-tunnel-non-public-stacks)
+      4. [Environment files (Compose)](#environment-files-compose)
    5. [Deployment operations](#deployment-operations)
-      1. [Local dev rebuild (all application images)](#local-dev-rebuild-all-application-images)
-      2. [Frontend CPM mode (admin-relevant)](#frontend-cpm-mode-admin-relevant)
-      3. [Staging / production](#staging--production)
-      4. [Rollback](#rollback)
+      1. [Local Compose rebuild (cafe-deploy)](#local-compose-rebuild-cafe-deploy)
+      2. [Local minikube (cafe-expresso)](#local-minikube-cafe-expresso)
+      3. [Frontend CPM mode (admin-relevant)](#frontend-cpm-mode-admin-relevant)
+      4. [Staging / production](#staging--production)
+      5. [Rollback](#rollback)
    6. [Health checks and service status](#health-checks-and-service-status)
-      1. [Quick probes (dev)](#quick-probes-dev)
-      2. [Compose status](#compose-status)
-      3. [Prometheus / Grafana (IMM-OPS-2)](#prometheus--grafana-imm-ops-2)
+      1. [Quick probes (Compose)](#quick-probes-compose)
+      2. [Quick probes (minikube)](#quick-probes-minikube)
+      3. [Compose status](#compose-status)
+      4. [minikube status](#minikube-status)
+      5. [Prometheus / Grafana (IMM-OPS-2)](#prometheus--grafana-imm-ops-2)
    7. [PostgreSQL retention and capacity](#postgresql-retention-and-capacity)
       1. [Why the database grows](#why-the-database-grows)
       2. [Monitor size and row pressure](#monitor-size-and-row-pressure)
       3. [Operator response (today)](#operator-response-today)
       4. [Constraints before any purge](#constraints-before-any-purge)
+      5. [pgweb (manual Postgres UI)](#pgweb-manual-postgres-ui)
    8. [Authentication and internal tokens (operator view)](#authentication-and-internal-tokens-operator-view)
    9. [CPM catalog administration](#cpm-catalog-administration)
       1. [Three layers (must stay consistent)](#three-layers-must-stay-consistent)
@@ -65,43 +73,64 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 | Area | This guide | Other reference |
 | --- | --- | --- |
 | Compose deploy, image tags, env templates | Overview + pointers | [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) |
+| minikube / Helm / kubectl | Overview + necessary commands | [cafe-expresso](https://github.com/create2-labs/cafe-expresso), [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md), [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md) |
 | HTTP API integration (`curl`, payloads) | Minimal (diagnosis only) | [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) |
 | CPM auth contract, error codes | Pointers | [docs/security/cpm-contract.md](./docs/security/cpm-contract.md) |
 | Explore rejection observability | Pointers + checklist | [docs/operations/cpm-explore-no-candidate-observability.md](./docs/operations/cpm-explore-no-candidate-observability.md) |
 | PostgreSQL retention, soft-delete growth, capacity | Monitoring + remediation | This guide § [PostgreSQL retention and capacity](#postgresql-retention-and-capacity) |
 | Product rules (W1–W8, immutability) | Summary | [functional-specifications.md](./functional-specifications.md) |
 
-**Out of scope:** application feature development, Terraform/Ansible authoring (see cafe-deploy), and future admin product UI (**IMM-OPS-3**).
+**Out of scope:** application feature development, Terraform/Ansible authoring (see cafe-deploy / cafe-expresso), and future admin product UI (**IMM-OPS-3**).
 
 ---
 
 
 ## Environments and access
 
+### Two local deployments
+
+Both remain valid. Do not drop Compose references while minikube P0 is the GitOps path under construction.
+
+| Deployment | Repo | Operator entry |
+| --- | --- | --- |
+| **Docker Compose** | `cafe-deploy` | `docker compose` + env files + NGINX edge |
+| **minikube P0** | `cafe-expresso` | Helm `cafe-platform` + ingress-nginx; full kubectl tutorial in [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md) |
+
 ### Typical bases
 
 | Context | User / edge | Discovery (direct) | CPM (direct) |
 | --- | --- | --- | --- |
-| Local dev | `http://localhost` or `https://localhost` | `http://localhost:8080` | `http://localhost:8082` |
+| Local Compose | `http://localhost` or `https://localhost` | `http://localhost:8080` | `http://localhost:8082` |
+| **Local minikube** | **`http://localhost:8080`** (ingress port-forward) | port-forward `svc/cafe-discovery-backend 8080:8080` if needed | port-forward `svc/cafe-cpm 8082:8080` if needed |
 | Staging / prod | `https://<host>` | Internal only | Internal only |
 
-Public routes at the edge:
+**minikube signup / signin (browser):** use **`http://localhost:8080/signup`** and **`http://localhost:8080/signin`**. Keep a terminal with:
+
+```bash
+kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8080:80
+```
+
+Do **not** port-forward only `svc/cafe-frontend` for UI+API — that pod is static SPA nginx and answers **405** on `POST /api/auth/signup`. The edge is **ingress-nginx** (Compose equivalent: cafe-deploy NGINX).
+
+Public routes at the edge (same path contract on Compose NGINX and minikube Ingress):
 
 - Discovery: `/api/discovery/v1/...`
+- Auth: `/api/auth/signup`, `/api/auth/signin`
 - CPM: `/api/cpm/v1/...`
 - CPM health (probes): `/api/cpm/healthz`
 - Discovery deploy version: `/api/version` (public, no auth)
 - CPM deploy version: `/api/cpm/version` (public, no auth; **CPM-OPS-3**)
+- Platform status: `/status` (minikube PR5 — Prometheus `platform_up` via status-proxy; not the Prometheus UI)
 
-CPM **`GET /metrics`** is scraped inside the Docker network (not exposed through NGINX). See **Observability** below.
+CPM **`GET /metrics`** is scraped inside the cluster / Docker network (not exposed through the public edge). See **Observability** below. Grafana is **not** in minikube P0 (phase 1b / PR10–PR11).
 
 ### SSH tunnel (non-public stacks)
 
 When services are not published on the public host, use the tunnel workflow documented in [cafe-deploy README — Access to non-public services](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#access-to-non-public-services-ssh-tunnel).
 
-### Environment files
+### Environment files (Compose)
 
-Each deployment uses an env file rendered before `docker compose up`:
+Each Compose deployment uses an env file rendered before `docker compose up`:
 
 ```bash
 cd cafe-deploy
@@ -112,11 +141,13 @@ docker compose -f docker-compose.dev.yml --env-file env/dev.local.env up -d
 
 Key version pins (examples): `DISCOVERY_VERSION`, `FRONTEND_VERSION`, `CPM_VERSION`, `NGINX_VERSION`. Image tags are the primary rollback lever.
 
+On **minikube**, secrets are a Kubernetes Secret (`cafe-platform-secrets`) — see [cafe-expresso `docs/secrets.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/secrets.md) and deploy commands below (never commit plaintext).
+
 ---
 
 ## Deployment operations
 
-### Local dev rebuild (all application images)
+### Local Compose rebuild (cafe-deploy)
 
 From `cafe-deploy`:
 
@@ -127,6 +158,56 @@ docker compose -f docker-compose.dev.yml --env-file env/dev.local.env up -d
 
 This rebuilds sibling repos (`cafe-discovery`, `cafe-frontend`, `cafe-crypto-policy-mgt`, scanners) and bakes frontend `VITE_*` build args from `env/dev.local.env`.
 
+### Local minikube (cafe-expresso)
+
+Necessary and sufficient commands (from [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)):
+
+```bash
+cd cafe-expresso
+export NS=cafe-platform
+
+# Cluster (16 GB Mac: 8 GB for minikube). Use Calico when NetworkPolicies matter (PR6+).
+minikube start --memory=8192 --cpus=4 --driver=docker
+# or: minikube start --memory=8192 --cpus=4 --driver=docker --cni=calico
+kubectl cluster-info
+minikube addons enable ingress
+
+helm upgrade --install cafe-platform charts/cafe-platform \
+  --namespace "$NS" --create-namespace \
+  -f charts/cafe-platform/values.yaml \
+  -f charts/cafe-platform/values-minikube.yaml
+
+kubectl -n "$NS" create secret generic cafe-platform-secrets \
+  --from-literal=JWT_SECRET=dev-not-secret \
+  --from-literal=POSTGRES_PASSWORD=cafe \
+  --from-literal=CAFE_PERSISTENCE_SERVICE_TOKEN=dev-cafe-auth06-shared-internal-token \
+  --from-literal=DISCOVERY_INTERNAL_AUTHZ_SERVICE_TOKEN=dev-cafe-auth06-shared-internal-token \
+  --from-literal=CAFE_SESSION_JWT_VALIDATION_SERVICE_TOKEN=dev-cafe-auth06-shared-internal-token \
+  --from-literal=CAFE_SCAN_AUTHORIZATION_SERVICE_TOKEN=dev-cafe-auth06-shared-internal-token \
+  --from-literal=MORALIS_API_KEY= \
+  --from-literal=TURNSTILE_SECRET_KEY= \
+  --from-literal=TURNSTILE_SITE_KEY= \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Edge for browser + /api (leave running)
+kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8080:80
+# → http://localhost:8080/  (signup: http://localhost:8080/signup)
+
+# Optional full smoke
+./scripts/smoke/smoke-minikube.sh
+```
+
+Stop / tear down:
+
+```bash
+helm uninstall cafe-platform -n "$NS"          # workloads; keep NS/PVC
+kubectl delete namespace "$NS"                  # full wipe including PVC
+minikube stop                                  # stop cluster
+# minikube delete                              # destructive
+```
+
+RBAC / Argo CD (PR7–PR8): ServiceAccounts, AppProject without `Secret`/`Namespace` sync — see cafe-expresso [`docs/security-rbac.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/security-rbac.md) and `./scripts/smoke/pr8-rbac-argocd.sh`.
+
 ### Frontend CPM mode (admin-relevant)
 
 | Variable | Effect |
@@ -134,21 +215,23 @@ This rebuilds sibling repos (`cafe-discovery`, `cafe-frontend`, `cafe-crypto-pol
 | `VITE_CPM_DATA_SOURCE=api` | CPM page calls real CPM HTTP (required to test catalog, explore, persist) |
 | `VITE_CPM_DATA_SOURCE=mock` | Fixtures only — no backend catalog |
 
-Set in `env/dev.local.env` before `redeployalldev.sh`. Release images default to `api`.
+Set in `env/dev.local.env` before `redeployalldev.sh` (Compose). Release / minikube images typically ship with `api`.
 
 ### Staging / production
 
-Follow [cafe-deploy — Release & Deployment Workflow](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#release--deployment-workflow-rc--staging--production): RC images → staging validation → promoted tags → production compose update.
+Follow [cafe-deploy — Release & Deployment Workflow](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#release--deployment-workflow-rc--staging--production): RC images → staging validation → promoted tags → production compose update. Cloud Kubernetes (OVH MKS) follows cafe-expresso after minikube PR9 validation (ADR).
 
 ### Rollback
 
-Change image version env vars to the last known-good tag, re-render templates if needed, `docker compose up -d`. Do not mix IMM schema migrations across incompatible Discovery versions without reading [RUNBOOK_SCAN_HISTORY.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_SCAN_HISTORY.md).
+**Compose:** change image version env vars to the last known-good tag, re-render templates if needed, `docker compose up -d`. Do not mix IMM schema migrations across incompatible Discovery versions without reading [RUNBOOK_SCAN_HISTORY.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_SCAN_HISTORY.md).
+
+**minikube:** re-`helm upgrade` with previous chart/values or known-good image tags in values; or `helm rollback cafe-platform` if revisions exist.
 
 ---
 
 ## Health checks and service status
 
-### Quick probes (dev)
+### Quick probes (Compose)
 
 ```bash
 curl -fsS http://localhost/api/health          # edge → Discovery health path
@@ -161,6 +244,29 @@ curl -kfsS https://localhost/api/cpm/healthz   # CPM via NGINX (prod-like path)
 curl -kfsS https://localhost/api/cpm/version   # CPM version via NGINX (prod-like path)
 ```
 
+### Quick probes (minikube)
+
+With ingress port-forward on `:8080`:
+
+```bash
+export EDGE_BASE=http://localhost:8080
+curl -fsS "${EDGE_BASE}/api/health"
+curl -fsS "${EDGE_BASE}/api/version"
+curl -fsS "${EDGE_BASE}/api/cpm/healthz"
+curl -fsS "${EDGE_BASE}/api/cpm/version"
+curl -fsS "${EDGE_BASE}/status"                # platform_up (PR5)
+curl -fsS "${EDGE_BASE}/healthz"               # edge guards
+```
+
+Direct pod Services (optional):
+
+```bash
+export NS=cafe-platform
+kubectl -n "$NS" port-forward svc/cafe-discovery-backend 18080:8080 &
+curl -fsS http://127.0.0.1:18080/health
+kubectl -n "$NS" port-forward svc/prometheus 9090:9090   # Prometheus UI (not on Ingress)
+```
+
 Expected version response shape (both services): `{"version":"vX.Y.Z"}` or an RC tag. The SPA **Platform Status** page displays Frontend, Discovery, and CPM versions from `/version.json`, `/api/version`, and `/api/cpm/version` respectively (**CPM-UI-7A**).
 
 ### Compose status
@@ -171,20 +277,30 @@ docker logs cafe-cpm-dev --tail 100
 docker logs cafe-discovery-dev --tail 100
 ```
 
+### minikube status
+
+```bash
+export NS=cafe-platform
+kubectl -n "$NS" get pods,svc,pvc
+kubectl -n "$NS" logs -f deployment/cafe-discovery-backend
+kubectl -n "$NS" describe pod <name>
+kubectl -n "$NS" get events --sort-by='.lastTimestamp' | tail -20
+```
+
 ### Prometheus / Grafana (IMM-OPS-2)
 
-After `render-templates.sh`, verify:
+**Compose** — after `render-templates.sh`, verify:
 
 - Prometheus **Targets** → `cafe-cpm-api` = UP (`PROMETHEUS_CPM_METRICS_TARGET`, default `cafe-cpm:8080`)
 - Blackbox job `cafe-cpm-health` → `PROMETHEUS_CPM_HEALTH_URL` (default `https://nginx/api/cpm/healthz`)
 - Grafana dashboard **CAFE - CPM Explore Rejections** (UID `cafe-cpm-explore-rejections`)
 
-Smoke:
-
 ```bash
 ./scripts/test-imm-ops-2.sh static    # config files
 ./scripts/test-imm-ops-2.sh live      # against running stack
 ```
+
+**minikube P0:** Prometheus + blackbox + `/status` only (PR5). **No Grafana** until phase 1b. Operator UI: `kubectl -n cafe-platform port-forward svc/prometheus 9090:9090`.
 
 ---
 
@@ -319,6 +435,30 @@ Do **not** bulk-delete from `scan_usage_events` to “free space” — that bre
 - **Backups:** smaller live DB does not shrink existing backup objects — align backup retention with legal/audit policy.
 - **Production:** no documented automated purge path yet — coordinate with product and `cafe-persistence` before any hard-delete policy.
 
+### pgweb (manual Postgres UI)
+
+Operator-only tool — **not** in the Helm chart / Compose stack. Same idea as starting `sosedoff/pgweb` by hand on `cafe-network` in cafe-deploy.
+
+**minikube** (from [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)):
+
+```bash
+export NS=cafe-platform
+PW=$(kubectl -n "$NS" get secret cafe-platform-secrets \
+  -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+
+kubectl -n "$NS" port-forward svc/postgres 5432:5432
+# other terminal:
+docker run --rm -p 8081:8081 \
+  sosedoff/pgweb \
+  --url "postgres://cafe:${PW}@host.docker.internal:5432/cafe?sslmode=disable"
+```
+
+UI: http://127.0.0.1:8081 — user/DB `cafe`/`cafe`.
+
+With Calico NetworkPolicies, an in-cluster pgweb pod must use `persistence` (or `discoveryBackend`) component labels — see k8s.md Option B.
+
+**Compose:** attach pgweb to the compose network and point at `postgres:5432` with the same credentials from the env file.
+
 ---
 
 ## Authentication and internal tokens (operator view)
@@ -339,6 +479,17 @@ Tokens must match across Discovery and CPM compose env. Mismatch symptoms: CPM `
 Full route classification: [docs/security/cpm-contract.md](./docs/security/cpm-contract.md).
 
 **Admin `curl` diagnosis** uses a normal user JWT (sign-in) — same as the developer guide. Service tokens are for inter-service calls only.
+
+On **minikube**, sign up / sign in via the edge:
+
+```bash
+export EDGE_BASE=http://localhost:8080   # ingress port-forward required
+curl -sS -X POST "${EDGE_BASE}/api/auth/signup" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin-test@example.com","password":"TestPass123!","confirm_password":"TestPass123!","turnstile_token":"dev-pass"}'
+```
+
+Browser: **`http://localhost:8080/signup`** / **`http://localhost:8080/signin`**.
 
 ---
 
@@ -509,6 +660,10 @@ Minimal workflow when supporting a user report. Full detail: [operations runbook
 ```bash
 export DISCOVERY_BASE='http://localhost:8080'
 export CPM_BASE='http://localhost:8082'
+# minikube edge alternative (ingress on :8080):
+# export DISCOVERY_BASE='http://localhost:8080/api'   # then use /auth/signin under EDGE — prefer:
+# export EDGE_BASE='http://localhost:8080'
+# TOKEN via POST ${EDGE_BASE}/api/auth/signin ; Discovery calls via ${EDGE_BASE}/api/discovery/v1/...
 export SCAN_ID='<scan-uuid>'
 
 TOKEN=$(curl -fsS -X POST "${DISCOVERY_BASE}/auth/signin" \
@@ -563,6 +718,7 @@ Compare `selection_request.target_chain_ids` with each instance `scope.chain_ids
 
 | User report | Check first | Admin action |
 | --- | --- | --- |
+| “Cannot signup / empty `users` table” (minikube) | Browser URL must be **`http://localhost:8080`** with ingress port-forward; Network tab `POST /api/auth/signup` | If **405**, user hit `cafe-frontend` alone — switch to ingress. Turnstile dummy token `XXXX.DUMMY.TOKEN.XXXX` is OK in dev |
 | “No wallet scan on CPM page” | Discovery scans exist, scan `completed` | W7 gate — newest scan must be completed; see functional specs |
 | “Policy greyed out / incompatible” | Explore rejection code | Catalog instance `scope.chain_ids` vs scan chains |
 | “Cannot delete scan” | `409 SCAN_REFERENCED_BY_POLICY` | User must delete or rebind CPM policy first (W3/W4) |
@@ -576,9 +732,9 @@ Admins do **not** mutate user drafts or persisted policies through catalog files
 
 ## Secrets and compliance
 
-- Env templates (`env/*.env.template`) document required secrets; local overrides use `*.local.env` (gitignored).
-- Use cafe-deploy **pre-commit** hooks to reduce accidental secret commits.
-- Service tokens (`CAFE_*_SERVICE_TOKEN`) are rotation-sensitive — update Discovery and CPM together.
+- **Compose:** env templates (`env/*.env.template`) document required secrets; local overrides use `*.local.env` (gitignored). Use cafe-deploy **pre-commit** hooks to reduce accidental secret commits.
+- **minikube:** `cafe-platform-secrets` via `kubectl` only — not in Git; AppProject (PR8) must not sync `kind: Secret`. See [cafe-expresso `docs/secrets.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/secrets.md).
+- Service tokens (`CAFE_*_SERVICE_TOKEN`) are rotation-sensitive — update Discovery and CPM together (same values in Compose env or the K8s Secret).
 - Logs may contain `scan_id` and hashed wallet identifiers for CPM explore events; do not export raw wallet addresses to metrics.
 
 ---
@@ -600,11 +756,13 @@ Admins do **not** mutate user drafts or persisted policies through catalog files
 
 ## Additional resources
 
-- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — API v1 integration reference
+- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — API v1 integration reference (Compose + minikube bases)
 - [technical-specifications.md](./technical-specifications.md) — architecture, IMM-OPS, testing matrix
 - [functional-specifications.md](./functional-specifications.md) — product rules and governance (W1–W8)
 - [cafe-crypto-policy-mgt README](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service, env vars, local run
-- [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) — compose, release workflow, env catalog
+- [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) — Docker Compose, release workflow, env catalog
+- [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube Helm / Argo CD; [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md) kubectl tutorial
+- [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md) — P0 backlog PR0–PR9
 - [CPM v1 flow](./docs/architecture/cpm-v1-flow.md) — Option A scan → explore → persist
 - [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md)
 - [CPM auth contract](./docs/security/cpm-contract.md)

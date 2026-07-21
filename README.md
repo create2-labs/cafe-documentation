@@ -1,6 +1,6 @@
 # CAFE Documentation
 
-This directory contains the official documentation for the CAFE (Crypto-Agility Framework for Ethereum) project. Last updated: June 2026.
+This directory contains the official documentation for the CAFE (Crypto-Agility Framework for Ethereum) project. Last updated: July 2026.
 
 ## Available Documents
 
@@ -21,11 +21,11 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Developer Guide
 
-- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including scan `scan_id` correlation, CPM-owned policy assessment, and QA sign-off checks.
+- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including **dual local deployments** (cafe-deploy Compose + cafe-expresso minikube), edge at **`http://localhost:8080`** on minikube for signup/signin, scan `scan_id` correlation, CPM-owned policy assessment, and QA sign-off checks.
 
 ### Admin Guide
 
-- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) — Platform administration: environments, deploy and health checks, **deploy version probes** (`/api/version`, `/api/cpm/version`), CPM catalog (templates + instances), observability, operator diagnosis, and user-support scenarios.
+- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) — Platform administration for **Compose and minikube**: environments, Helm/kubectl deploy, ingress edge, deploy and health checks (`/api/version`, `/api/cpm/version`), pgweb, CPM catalog, observability, operator diagnosis, and user-support scenarios.
 
 ### Architecture
 
@@ -59,12 +59,12 @@ CAFE is composed of three main services:
 - [Discovery Repository](../cafe-discovery/) — Cryptographic discovery service with PQC (see README *Data structure (CPM export contract)* for the CPM-facing observation shape)
 - [Crypto Policy Management (`cafe-crypto-policy-mgt`)](https://github.com/create2-labs/cafe-crypto-policy-mgt) — Policy service; normative contract and vocabulary for Discovery exports
 - [Frontend Repository](../cafe-frontend/) — User interface
-- [Infrastructure Repository](../cafe-infra/) — Infrastructure and deployment
+- [cafe-deploy](https://github.com/create2-labs/cafe-deploy) — Docker Compose deployment (VM / local)
+- [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube / Helm / Argo CD (Kubernetes P0)
 - [Crypto backend Repository](https://github.com/create2-labs/cafe-crypto-backend) — Cryptographic backend; tooling for building and running applications with Post-Quantum Cryptography (PQC) support
 - [Edge Repository](https://github.com/create2-labs/cafe-edge) — Reverse-proxy images with PQC
 - [TLS scanner Repository](https://github.com/create2-labs/cafe-scanner-tls) — TLS scanner service with PQC
 - [CAFE Website](../cafe-website/) — Public website
-- Deploy repository is not public for security reasons; deployment is straightforward to reproduce without it
 
 ## Contributing
 
