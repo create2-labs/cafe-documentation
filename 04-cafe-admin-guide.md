@@ -6,6 +6,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 ## Document Versioning
 
+- v0.5.0
+  - Date: August 9th, 2026
+  - Comments: **Cloudflare Tunnel** home hosting — `docker-compose.prod-tunnel.yml`, HTTP origin on `127.0.0.1:8080`, pointers to cafe-deploy README and `CAFE_selfhosted.md`.
 - v0.4.0
   - Date: July 21st, 2026
   - Comments: Dual local deployments — keep **cafe-deploy** (Compose) and add **cafe-expresso** (minikube): Helm deploy, ingress edge at `http://localhost:8080`, signup/signin, pgweb, probes; commands aligned with cafe-expresso `docs/k8s.md`.
@@ -30,13 +33,15 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
       1. [Two local deployments](#two-local-deployments)
       2. [Typical bases](#typical-bases)
       3. [SSH tunnel (non-public stacks)](#ssh-tunnel-non-public-stacks)
-      4. [Environment files (Compose)](#environment-files-compose)
+      4. [Cloudflare Tunnel (home hosting)](#cloudflare-tunnel-home-hosting)
+      5. [Environment files (Compose)](#environment-files-compose)
    5. [Deployment operations](#deployment-operations)
       1. [Local Compose rebuild (cafe-deploy)](#local-compose-rebuild-cafe-deploy)
       2. [Local minikube (cafe-expresso)](#local-minikube-cafe-expresso)
       3. [Frontend CPM mode (admin-relevant)](#frontend-cpm-mode-admin-relevant)
       4. [Staging / production](#staging--production)
-      5. [Rollback](#rollback)
+      5. [Production via Cloudflare Tunnel](#production-via-cloudflare-tunnel)
+      6. [Rollback](#rollback)
    6. [Health checks and service status](#health-checks-and-service-status)
       1. [Quick probes (Compose)](#quick-probes-compose)
       2. [Quick probes (minikube)](#quick-probes-minikube)
@@ -73,6 +78,7 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 | Area | This guide | Other reference |
 | --- | --- | --- |
 | Compose deploy, image tags, env templates | Overview + pointers | [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) |
+| Cloudflare Tunnel (home, no inbound ports) | Overview + commands | [cafe-deploy Cloudflare Tunnel](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#cloudflare-tunnel-home--no-inbound-ports), [CAFE_selfhosted.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/CAFE_selfhosted.md) |
 | minikube / Helm / kubectl | Overview + necessary commands | [cafe-expresso](https://github.com/create2-labs/cafe-expresso), [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md), [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md) |
 | HTTP API integration (`curl`, payloads) | Minimal (diagnosis only) | [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) |
 | CPM auth contract, error codes | Pointers | [docs/security/cpm-contract.md](./docs/security/cpm-contract.md) |
@@ -102,7 +108,8 @@ Both remain valid. Do not drop Compose references while minikube P0 is the GitOp
 | --- | --- | --- | --- |
 | Local Compose | `http://localhost` or `https://localhost` | `http://localhost:8080` | `http://localhost:8082` |
 | **Local minikube** | **`http://localhost:8080`** (ingress port-forward) | port-forward `svc/cafe-discovery-backend 8080:8080` if needed | port-forward `svc/cafe-cpm 8082:8080` if needed |
-| Staging / prod | `https://<host>` | Internal only | Internal only |
+| Staging / prod (public VM) | `https://<host>` | Internal only | Internal only |
+| **Prod + Cloudflare Tunnel** | `https://cafe.create2-labs.fr` (TLS at Cloudflare) | Internal only; origin `http://127.0.0.1:8080` | Internal only |
 
 **minikube signup / signin (browser):** use **`http://localhost:8080/signup`** and **`http://localhost:8080/signin`**. Keep a terminal with:
 
@@ -127,6 +134,23 @@ CPM **`GET /metrics`** is scraped inside the cluster / Docker network (not expos
 ### SSH tunnel (non-public stacks)
 
 When services are not published on the public host, use the tunnel workflow documented in [cafe-deploy README — Access to non-public services](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#access-to-non-public-services-ssh-tunnel).
+
+### Cloudflare Tunnel (home hosting)
+
+Use Cloudflare Tunnel when CAFE runs on a **home** network and you must not open inbound 80/443 on the ISP box (double NAT / CGNAT friendly).
+
+| Piece | Role |
+| --- | --- |
+| Cloudflare DNS + Tunnel | Public HTTPS for `cafe.create2-labs.fr` |
+| `cloudflared` on the host | Outbound tunnel to origin `http://localhost:8080` |
+| `docker-compose.prod-tunnel.yml` | Same prod images; NGINX HTTP edge on loopback only |
+
+Do **not** publish only the frontend container: `/api/*` still requires the NGINX edge. Named tunnels reject self-signed HTTPS origins unless TLS verify is disabled; the tunnel compose path uses plain HTTP instead.
+
+Canonical operator docs:
+
+- Quick path: [cafe-deploy README — Cloudflare Tunnel](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#cloudflare-tunnel-home--no-inbound-ports)
+- Full home guide (OpenWrt, DNS, firewall): [CAFE_selfhosted.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/CAFE_selfhosted.md)
 
 ### Environment files (Compose)
 
@@ -220,6 +244,39 @@ Set in `env/dev.local.env` before `redeployalldev.sh` (Compose). Release / minik
 ### Staging / production
 
 Follow [cafe-deploy — Release & Deployment Workflow](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#release--deployment-workflow-rc--staging--production): RC images → staging validation → promoted tags → production compose update. Cloud Kubernetes (OVH MKS) follows cafe-expresso after minikube PR9 validation (ADR).
+
+On a public VM, use `docker-compose.prod.yml` (TLS on 80/443). For home hosting without inbound ports, use [Production via Cloudflare Tunnel](#production-via-cloudflare-tunnel) instead.
+
+### Production via Cloudflare Tunnel
+
+From `cafe-deploy` on the home host:
+
+```bash
+cp env/prod.tunnel.env.template env/prod.tunnel.env
+./scripts/render-templates.sh env/prod.local.env env/prod.tunnel.env
+docker compose -f docker-compose.prod-tunnel.yml \
+  --env-file env/prod.local.env --env-file env/prod.tunnel.env up -d
+curl -fsS http://127.0.0.1:8080/healthz
+```
+
+In Cloudflare → **Networks → Tunnels** → Public Hostname:
+
+```text
+Hostname : cafe.create2-labs.fr
+Service  : http://localhost:8080
+```
+
+Then run `cloudflared` on the host (`CLOUDFLARED_TUNNEL_TOKEN` + `./scripts/cloudflare-tunnel.sh`).
+
+Probes after tunnel is healthy:
+
+```bash
+curl -fsS https://cafe.create2-labs.fr/api/version
+curl -fsS https://cafe.create2-labs.fr/api/cpm/version
+curl -fsS https://cafe.create2-labs.fr/api/cpm/healthz
+```
+
+Do not stack `overrides/prod.yml` with the tunnel override. Grafana / Prometheus remain on loopback (SSH LocalForward), same as classic prod.
 
 ### Rollback
 
@@ -761,6 +818,8 @@ Admins do **not** mutate user drafts or persisted policies through catalog files
 - [functional-specifications.md](./functional-specifications.md) — product rules and governance (W1–W8)
 - [cafe-crypto-policy-mgt README](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service, env vars, local run
 - [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) — Docker Compose, release workflow, env catalog
+- [cafe-deploy — Cloudflare Tunnel](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#cloudflare-tunnel-home--no-inbound-ports) — prod-tunnel compose + cloudflared
+- [CAFE_selfhosted.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/CAFE_selfhosted.md) — home OpenWrt + tunnel end-to-end
 - [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube Helm / Argo CD; [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md) kubectl tutorial
 - [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md) — P0 backlog PR0–PR9
 - [CPM v1 flow](./docs/architecture/cpm-v1-flow.md) — Option A scan → explore → persist

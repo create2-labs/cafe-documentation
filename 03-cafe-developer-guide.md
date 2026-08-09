@@ -4,6 +4,9 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.14.0
+  - Date: August 9th, 2026
+  - Comments: Note **Cloudflare Tunnel** public base (`https://cafe.create2-labs.fr`) for home Compose prod-tunnel; same `/api/*` path contract as classic edge.
 - v0.13.0
   - Date: July 21st, 2026
   - Comments: Document dual local deployments — **cafe-deploy** (Docker Compose) and **cafe-expresso** (minikube); edge UI/API via `http://localhost:8080` on minikube; signup/signin through ingress (not frontend-only port-forward).
@@ -36,6 +39,7 @@ CAFE currently supports **two parallel local deployments**. Both stay documented
 | Deployment | Repository | Edge (browser UI + `/api`) | Notes |
 | --- | --- | --- | --- |
 | **Docker Compose** | [`cafe-deploy`](https://github.com/create2-labs/cafe-deploy) | `https://localhost` (NGINX) or `http://localhost` | Classic VM/dev stack; env files + `docker compose` |
+| **Compose + Cloudflare Tunnel** | [`cafe-deploy`](https://github.com/create2-labs/cafe-deploy) | `https://cafe.create2-labs.fr` (TLS at Cloudflare; origin `http://127.0.0.1:8080`) | Home hosting; `docker-compose.prod-tunnel.yml` — see [admin guide](./04-cafe-admin-guide.md#cloudflare-tunnel-home-hosting) |
 | **minikube (P0)** | [`cafe-expresso`](https://github.com/create2-labs/cafe-expresso) | **`http://localhost:8080`** via ingress-nginx port-forward | Helm chart `cafe-platform`; kubectl/Helm ops in [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md) |
 
 Architecture / backlog: [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md). Operator kubectl cheat-sheet: [cafe-expresso `docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md). Admin day-2: [04-cafe-admin-guide.md](./04-cafe-admin-guide.md).
@@ -98,7 +102,7 @@ Use one of these bases depending on where the caller runs.
 | Context | Discovery base | CPM base | Notes |
 | --- | --- | --- | --- |
 | Direct local services (Compose ports or kubectl port-forward to pods) | `http://localhost:8080` | `http://localhost:8082` | Backend paths exactly as registered by each service (`/auth/...`, `/discovery/v1/...`, `/api/cpm/v1/...` on CPM). |
-| **Edge — cafe-deploy NGINX** | `https://<host>/api` | `https://<host>` | Discovery `/api/discovery/v1/...`; CPM `/api/cpm/v1/...`. Local often `https://localhost`. |
+| **Edge — cafe-deploy NGINX** | `https://<host>/api` | `https://<host>` | Discovery `/api/discovery/v1/...`; CPM `/api/cpm/v1/...`. Local often `https://localhost`. Home tunnel: same paths on `https://cafe.create2-labs.fr` (TLS at Cloudflare). |
 | **Edge — cafe-expresso minikube** | `http://localhost:8080/api` | `http://localhost:8080` | After ingress port-forward `8080:80`. **Signup/signin UI:** `http://localhost:8080`. No TLS on P0. |
 
 Examples below use:
@@ -228,6 +232,13 @@ curl -X POST "${DISCOVERY_BASE}/discovery/v1/scan" \
   -H "Authorization: Bearer ${JWT}" \
   -H "Content-Type: application/json" \
   -d '{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}' | jq .
+```
+
+```bash
+curl -X POST "${DISCOVERY_BASE}/discovery/v1/scan" \
+  -H "Authorization: Bearer ${JWT}" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://www.github.com"}' | jq .
 ```
 
 Typical accepted response:

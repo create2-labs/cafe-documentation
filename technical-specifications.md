@@ -1,26 +1,45 @@
 # CAFE — Technical Specifications
 
 1. [CAFE — Technical Specifications](#cafe--technical-specifications)
-2. [Introduction](#introduction)
-   1. [Technical scope](#technical-scope)
-   2. [Repositories](#repositories)
-3. [Architecture](#architecture)
-4. [Public HTTP API](#public-http-api)
-5. [Discovery service](#discovery-service)
-6. [CPM service](#cpm-service)
-   1. [Deploy version endpoint (CPM-OPS-3)](#deploy-version-endpoint-cpm-ops-3)
-   2. [Explore no-deployable-candidate observability (IMM-OPS-1…2)](#explore-no-deployable-candidate-observability-imm-ops-12)
-7. [Frontend](#frontend)
-   1. [CPM graph workspace (CPM-UI-1…8 / US1–US21)](#cpm-graph-workspace-cpm-ui-18--us1us21)
-   2. [Platform Status versions (CPM-UI-7A)](#platform-status-versions-cpm-ui-7a)
-   3. [Explore rejection UX (REQ8 / FE-IMM-13)](#explore-rejection-ux-req8--fe-imm-13)
-8. [Infrastructure and deployment](#infrastructure-and-deployment)
-9. [Data storage](#data-storage)
-10. [Messaging and scan pipeline](#messaging-and-scan-pipeline)
-11. [Testing and quality assurance](#testing-and-quality-assurance)
-12. [External tools](#external-tools)
-13. [Glossary](#glossary)
-14. [References](#references)
+   1. [Introduction](#introduction)
+      1. [Technical scope](#technical-scope)
+      2. [Repositories](#repositories)
+   2. [Architecture](#architecture)
+      1. [Logical view](#logical-view)
+      2. [Authentication flow](#authentication-flow)
+      3. [CPM ↔ Discovery coupling](#cpm--discovery-coupling)
+   3. [Public HTTP API](#public-http-api)
+   4. [Discovery service](#discovery-service)
+      1. [Components](#components)
+      2. [Scan persistence model (target)](#scan-persistence-model-target)
+      3. [Redis](#redis)
+      4. [Error codes (representative)](#error-codes-representative)
+      5. [OpenAPI and contracts](#openapi-and-contracts)
+   5. [CPM service](#cpm-service)
+      1. [Layout](#layout)
+      2. [Guard implementation notes](#guard-implementation-notes)
+      3. [Assessment pipeline](#assessment-pipeline)
+      4. [Deploy version endpoint (CPM-OPS-3)](#deploy-version-endpoint-cpm-ops-3)
+      5. [Explore no-deployable-candidate observability (IMM-OPS-1…2)](#explore-no-deployable-candidate-observability-imm-ops-12)
+         1. [Hook (IMM-OPS-1)](#hook-imm-ops-1)
+         2. [Prometheus counter](#prometheus-counter)
+         3. [Structured log (`cpm.explore.no_deployable_candidate`)](#structured-log-cpmexploreno_deployable_candidate)
+         4. [Deploy / Grafana (IMM-OPS-2)](#deploy--grafana-imm-ops-2)
+   6. [Frontend](#frontend)
+      1. [CPM graph workspace (CPM-UI-1…8 / US1–US21)](#cpm-graph-workspace-cpm-ui-18--us1us21)
+      2. [Platform Status versions (CPM-UI-7A)](#platform-status-versions-cpm-ui-7a)
+      3. [Explore rejection UX (REQ8 / FE-IMM-13)](#explore-rejection-ux-req8--fe-imm-13)
+   7. [Infrastructure and deployment](#infrastructure-and-deployment)
+   8. [Data storage](#data-storage)
+      1. [PostgreSQL (Discovery)](#postgresql-discovery)
+      2. [CPM persistence](#cpm-persistence)
+   9. [Messaging and scan pipeline](#messaging-and-scan-pipeline)
+   10. [Testing and quality assurance](#testing-and-quality-assurance)
+       1. [Layers](#layers)
+       2. [Product acceptance traceability](#product-acceptance-traceability)
+   11. [External tools](#external-tools)
+   12. [Glossary](#glossary)
+   13. [References](#references)
 
 ---
 
@@ -48,7 +67,7 @@ Non-goals for this document: line-by-line OpenAPI field lists (see per-repo `ope
 | `cafe-discovery` | Discovery API, persistence service, scanners, OpenAPI |
 | `cafe-crypto-policy-mgt` | CPM API, policy domain, immutability guards |
 | `cafe-frontend` | User interface |
-| `cafe-deploy` | Compose, Ansible, smoke scripts, runbooks |
+| `cafe-deploy` | Compose, Ansible, smoke scripts, runbooks; Cloudflare Tunnel prod-tunnel edge |
 | `cafe-documentation` | Product and integration docs (this directory) |
 | `cafe-crypto-backend` | PQC cryptographic tooling |
 | `cafe-scanner-wallet`, `cafe-scanner-tls` | Scanner implementations |
@@ -330,6 +349,15 @@ When `POST /api/cpm/v1/policies/decisions/explore` returns HTTP **200** with emp
 ## Infrastructure and deployment
 
 - **`cafe-deploy`:** Docker Compose stacks, Ansible, nginx templates, smoke scripts.
+- **Public edge modes (Compose):**
+
+| Mode | Entrypoint | Edge | Notes |
+| --- | --- | --- | --- |
+| Classic prod / staging | `docker-compose.prod.yml` / `.staging.yml` | NGINX TLS on host `80`/`443` | Public VM / floating IP |
+| **Cloudflare Tunnel (home)** | `docker-compose.prod-tunnel.yml` | NGINX plain HTTP on `127.0.0.1:8080` (`NGINX_EDGE_MODE=tunnel`) | No inbound ports; Cloudflare terminates HTTPS; `cloudflared` on the host |
+
+Shared UI + `/api/*` locations live in `templates/nginx/cafe-locations.inc.template`. Publishing only `cafe-frontend` is insufficient (SPA still needs the edge for APIs). Operator docs: [cafe-deploy README — Cloudflare Tunnel](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#cloudflare-tunnel-home--no-inbound-ports), [CAFE_selfhosted.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/CAFE_selfhosted.md). Admin day-2: [04-cafe-admin-guide.md](./04-cafe-admin-guide.md#cloudflare-tunnel-home-hosting).
+
 - **Immutability smoke suite** (orchestrated by `scripts/tests-scans.sh`):
 
 | Script | Covers |
@@ -427,6 +455,7 @@ cd cafe-deploy/scripts
 | Term | Definition |
 | --- | --- |
 | **Edge** | Reverse proxy exposing unified `/api/*` paths |
+| **Cloudflare Tunnel** | Outbound `cloudflared` path so home Compose can publish HTTPS without inbound 80/443 (`prod-tunnel` HTTP origin) |
 | **IMM** | Scan immutability implementation milestone (IMM-1 … IMM-12) |
 | **NATS** | Message bus for scan lifecycle events |
 | **Option A** | CPM integration via Discovery v1 `scan_id` |
