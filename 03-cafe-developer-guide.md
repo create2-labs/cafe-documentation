@@ -4,6 +4,9 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.15.0
+  - Date: August 2026
+  - Comments: Align with ADR Capability Providers (2026-08): explore `selection_request` uses `key_rotation_model` (`none` | `per_userop`) instead of `key_rotation_required` bool; `target_posture` is the stable v0.1 wire alias for required posture; explore response carries `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, soft findings — no `graphEdges` / `nodeInstances`; persist payload is `cafe.crypto_policy.v0.2` with `accepted_provider_snapshot`. See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
 - v0.14.0
   - Date: August 9th, 2026
   - Comments: Note **Cloudflare Tunnel** public base (`https://cafe.create2-labs.fr`) for home Compose prod-tunnel; same `/api/*` path contract as classic edge.
@@ -310,7 +313,22 @@ Discovery never reads CPM persistence directly, and it must not map CPM internal
 
 ### Explore a decision synchronously
 
-`decisions/explore` is a synchronous preview. It evaluates an observation and a selection request, but it does not persist a final policy and does not trigger the async assessment pipeline.
+`decisions/explore` is a synchronous preview. It evaluates an observation and a selection request against the **Capability Provider** catalog, and returns ranked candidates with posture and provider information. It does not persist a final policy and does not trigger the async assessment pipeline.
+
+#### `selection_request` fields (v0.1 contract)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `target_posture` | string | Stable **v0.1 wire alias** for the required posture (`"hybrid"`, `"pq_only"`, etc.) — not renamed |
+| `target_chain_ids` | `[]int` | Chains the policy must cover (all-or-nothing) |
+| `key_rotation_model` | string | `"none"` or `"per_userop"` — replaces the removed `key_rotation_required` bool |
+| `allow_new_wallet` | bool | Whether a new wallet address is acceptable |
+| `address_continuity_required` | bool | Whether address continuity must be preserved |
+| `require_multichain` | bool | Whether the candidate must support multi-chain |
+| `minimum_maturity` | int | Minimum provider maturity level |
+| `approval_mode` | string | `"manual"` (default) |
+
+> **Breaking change (CPM-P3 / 2026-08):** `key_rotation_required: bool` is removed. Use `key_rotation_model: "per_userop"` (pilot default) or `"none"`.
 
 ```bash
 curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
@@ -318,21 +336,21 @@ curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
   -H "Content-Type: application/json" \
   -d '{
     "observation": {
-      "chain_ids": [1, 8453],
+      "chain_ids": [11155111],
       "account_kind": "eoa",
       "current_algorithm": "secp256k1_ecrecover",
       "current_pq_posture": "classical_only",
       "public_key_exposed": true,
-      "is_multichain": true,
-      "observed_at": "2026-04-17T09:59:58Z"
+      "is_multichain": false,
+      "observed_at": "2026-08-01T00:00:00Z"
     },
     "selection_request": {
       "target_posture": "hybrid",
-      "target_chain_ids": [1, 8453],
-      "require_multichain": true,
+      "target_chain_ids": [11155111],
+      "require_multichain": false,
       "allow_new_wallet": false,
       "address_continuity_required": true,
-      "key_rotation_required": true,
+      "key_rotation_model": "per_userop",
       "recovery_required": true,
       "minimum_maturity": 1,
       "approval_mode": "manual"
@@ -340,13 +358,43 @@ curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
   }' | jq .
 ```
 
+#### Explore response — ranked candidate shape
+
+A ranked candidate now carries Capability Provider fields. **No** `graphEdges`, `nodeInstances`, or `node_path` in the response:
+
+```json
+{
+  "candidate_id": "cpx_pq_account_validation_nicetry_v1",
+  "template_id": "tpl_pq_account_validation_v1",
+  "required_posture": "hybrid",
+  "solution_profile_ref": {
+    "provider_id": "nicetry",
+    "solution_profile_id": "nicetry.fors_c.erc4337.v0_1",
+    "manifest_version": "2026-08"
+  },
+  "resulting_posture": "hybrid",
+  "maturity": "research",
+  "claim_status": "declared",
+  "compatibility_status": "compatible",
+  "compatibility_findings": [
+    { "code": "requires_bundler", "severity": "soft" },
+    { "code": "requires_local_signer_state", "severity": "soft" }
+  ]
+}
+```
+
+Key semantics:
+- `claim_status: "declared"` — the provider has **declared** this capability; it is **not** an audited or executed proof.
+- Soft findings (`requires_bundler`, `requires_local_signer_state`) are non-blocking for ranking but must be explicitly accepted by the user before persist.
+- Hard findings (`incompatible.provider.chain`, `incompatible.provider.rotation`, `incompatible.posture`) move the candidate to `rejected_candidates`.
+
 When `scan_id` is supplied, CPM may authorize scan visibility against Discovery, but the explore endpoint still consumes the provided observation. It does not fetch authoritative scan detail as a substitute for `observation`.
 
 #### Option A: explore with Discovery v1 `policy_context`
 
 **Option A** (post-V1 CPM) means policy workflows run against **real user-owned wallet scans** exposed by the authenticated Discovery backend—see [CPM `workplans/CPM_post_v_1_option_a_scan_context.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md). The v1 implementation uses list/detail under `/discovery/v1/wallets/scans` and CPM explore with client-built **`policy_context`** from scan detail (distinct from async assessment, which forbids `policy_context`).
 
-Production UI and integrators on **Option A** load wallet scan **detail** from `GET /discovery/v1/wallets/scans/{scan_id}` (edge: `/api/discovery/v1/...`) and send that shape as **`policy_context`** on explore, plus top-level **`scan_id`** and **`selection_request`**. Field mapping is normative in [Discovery `CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md`](https://github.com/create2-labs/cafe-discovery/blob/main/docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) §3.1; the integrated story is in [CPM `CPM_OPTION_A_INTEGRATED.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CPM_OPTION_A_INTEGRATED.md) and [Option A architecture](./docs/architecture/cpm-v1-flow.md). CPM UI behavior (graph workspace, **US1–US21**): [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md).
+Production UI and integrators on **Option A** load wallet scan **detail** from `GET /discovery/v1/wallets/scans/{scan_id}` (edge: `/api/discovery/v1/...`) and send that shape as **`policy_context`** on explore, plus top-level **`scan_id`** and **`selection_request`**. Field mapping is normative in [Discovery `CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md`](https://github.com/create2-labs/cafe-discovery/blob/main/docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) §3.1; the integrated story is in [CPM `CPM_OPTION_A_INTEGRATED.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CPM_OPTION_A_INTEGRATED.md) and [Option A architecture](./docs/architecture/cpm-v1-flow.md). CPM UI behavior (solution profile view, **US1–US21**): [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md).
 
 ```bash
 DETAIL=$(curl -s "${DISCOVERY_BASE}/discovery/v1/wallets/scans/${SCAN_ID}" \
@@ -362,11 +410,11 @@ curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
       policy_context: $ctx,
       selection_request: {
         target_posture: "hybrid",
-        target_chain_ids: [1],
+        target_chain_ids: [11155111],
         require_multichain: false,
         allow_new_wallet: false,
         address_continuity_required: true,
-        key_rotation_required: true,
+        key_rotation_model: "per_userop",
         recovery_required: true,
         minimum_maturity: 1,
         approval_mode: "manual"
@@ -385,6 +433,40 @@ Explore may return **200** with an empty `decision.selected_policy_id` and popul
 | Integrators | Treat HTTP 200 + rejections as a valid outcome; inspect `rejection_reasons[].code` and messages before persist |
 
 **Smoke (integrated path):** from `cafe-deploy`, `SKIP_PERSIST=1 ./scripts/test-discovery-v1-wallet-scans-to-cpm.sh` with `SCAN_ID`, `DISCOVERY_BASE`, `CPM_BASE`, and credentials — stops after explore when no candidate is selected.
+
+### Persist payload — `cafe.crypto_policy.v0.2`
+
+Starting with CPM-P6, the draft payload sent to `POST /api/cpm/v1/drafts` and persisted via `POST /api/cpm/v1/drafts/{draft_id}/persist` must be **schema version `cafe.crypto_policy.v0.2`**. The key difference from v0.1 is the addition of `accepted_provider_snapshot` and `solution_profile_ref`.
+
+**Minimum required fields (v0.2):**
+
+```json
+{
+  "schema_version": "cafe.crypto_policy.v0.2",
+  "template_id": "tpl_pq_account_validation_v1",
+  "required_posture": "hybrid",
+  "solution_profile_ref": {
+    "provider_id": "nicetry",
+    "solution_profile_id": "nicetry.fors_c.erc4337.v0_1",
+    "manifest_version": "2026-08"
+  },
+  "accepted_provider_snapshot": {
+    "provider_id": "nicetry",
+    "solution_profile_id": "nicetry.fors_c.erc4337.v0_1",
+    "manifest_version": "2026-08",
+    "snapshot_at": "2026-08-01T00:00:00Z",
+    "accepted_soft_findings": ["requires_bundler", "requires_local_signer_state"]
+  }
+}
+```
+
+**Gate rules at persist:**
+- `schema_version` must be `cafe.crypto_policy.v0.2` (empty or `v0.1` → `400 CRYPTO_POLICY_PAYLOAD_INVALID`).
+- Provider refs in `accepted_provider_snapshot` must be **pinned** — `unpinned_pending_fixture` is rejected.
+- Soft findings listed in `accepted_soft_findings` must match those returned by explore for that candidate.
+- Wallet proof (signed message from `wallet-challenges`) is still required as in V1.
+
+> **Note:** Until CPM-P7 (pin Nicetry refs), the Nicetry fixture carries `unpinned_pending_fixture` refs. Persist with real Nicetry snapshot will be available after CPM-P7 is merged.
 
 ### Request async policy assessment
 
@@ -444,13 +526,21 @@ Use this checklist before opening or merging API coherency documentation changes
 - Policy assessment docs say CPM-owned, wallet-scan only, `202` on acceptance, `policy_context` rejected, TLS scan IDs rejected.
 - Delete scan docs mention CPM reference verification, `409 SCAN_REFERENCED_BY_POLICY`, and `503 POLICY_REFERENCE_CHECK_UNAVAILABLE`.
 - Edge docs preserve `/api/internal/*` as not exposed.
+- **Capability Providers (v0.1):** explore `selection_request` uses `key_rotation_model` (`none`/`per_userop`), not `key_rotation_required` bool.
+- **Capability Providers:** explore response carries `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status` — no `graphEdges`/`nodeInstances`.
+- **`claim_status: "declared"`** is documented as a provider declaration, not an audited or executed proof.
+- **Persist v0.2:** payload uses `schema_version: "cafe.crypto_policy.v0.2"` with `accepted_provider_snapshot`; `unpinned_pending_fixture` refs are rejected by the gate.
+- **`target_posture`** is documented as the stable v0.1 wire alias — not renamed to `required_posture` at the wire level.
 
 ## Additional Resources
 
 - `cafe-discovery/openapi/discovery-v1.yaml` for the Discovery v1 contract.
-- `cafe-crypto-policy-mgt/openapi/cpm-v1.yaml` for the CPM v1 contract.
+- `cafe-crypto-policy-mgt/openapi/cpm-v1.yaml` for the CPM v1 contract (includes Capability Provider fields post-CPM-P4b).
 - `docs/security/cpm-auth-only-contract.md` for CPM authentication, scan authorization, service-token, and troubleshooting details.
 - `docs/api/api-v1-qa-checklist.md` for a compact reviewer checklist.
 - [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) for platform administration (deploy Compose + minikube, CPM catalog, observability).
 - [cafe-deploy](https://github.com/create2-labs/cafe-deploy) — Docker Compose deployment (still supported).
 - [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube / Helm / Argo CD; operator tutorial [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md).
+- [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) — Capability Provider ADR.
+- [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service, env vars (`CPM_PROVIDER_MANIFEST_PATHS`), provider model.
+- [cafe-frontend `CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) — CPM UI user stories US1–US21 and delivery epics.

@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.6.0
+  - Date: August 18th, 2026
+  - Comments: Update **Crypto Policy Management** section for Capability Provider model (ADR 2026-08): solution profile view replaces policy graph; `key_rotation_model` selector; `claim_status: declared` wording; soft findings acceptance before persist; `accepted_provider_snapshot` in persist payload. See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
 - v0.5.0
   - Date: June 21st, 2026
   - Comments: Add **Crypto Policy Management** user guide aligned with CPM UI user stories **US1–US21** (graph workspace, persist without separate Validate, Discovery deep link, session resume, leave guard).
@@ -318,7 +321,7 @@ Click on any scan result to view:
 
 ## Crypto Policy Management
 
-The **Crypto Policy Management** page (`/crypto-policy-management`) lets you define a **recommended Crypto Policy (CP)** migration path for an **EOA wallet scan**. The page is **graph-first**: one column shows your selected scan, policy template, and migration steps as connected nodes.
+The **Crypto Policy Management** page (`/crypto-policy-management`) lets you define a **recommended Crypto Policy (CP)** for an **EOA wallet scan**. The page shows a **solution profile view**: you select a scan, browse compatible **Capability Provider** candidates in a list, and inspect the chosen provider through a structured **solution profile card** (Input / Account / Signature / Posture blocks).
 
 **Prerequisites:**
 
@@ -334,67 +337,83 @@ If you have no eligible EOA scan, the page shows an **empty state** with a link 
 
 #### Selecting a wallet scan
 
-On first visit, you pick a scan from the **scan picker** (no scan is pre-selected). After you select a scan:
+On first visit, you pick a scan from the **scan picker** (no scan is pre-selected). After you select a scan, the page loads CPM explore results and shows a list of **compatible candidates** (or a rejection banner if none apply).
 
-- The **scan node** appears as the first graph element.
-- A **+** edge lets you choose a Crypto Policy from the catalog.
-- If the backend already has a **draft** and/or **persisted CP** for that scan, the matching graph branch loads automatically.
-
-**Change scan:** click the **scan node** to open a modal with your wallet scans (search, eligibility gates). Pick another scan to switch targets. If you have **unsaved draft edits** not yet saved to the server, you are asked to confirm before switching.
+**Change scan:** use the scan picker to switch. If you have **unsaved draft edits** not yet saved to the server, you are asked to confirm before switching.
 
 ### Opening CPM from Discovery
 
-On **Discovery → Wallet scan**, each eligible row may show **Open CPM** (label may reflect status: no policy, resume draft, view policy). This opens CPM with that scan pre-selected (`?scanId=…`).
+On **Discovery → Wallet scan**, each eligible row may show **Open CPM** (label may reflect status: no policy, resume draft, view policy). This opens CPM with that scan pre-selected (`?scanId=...`).
 
-When you leave CPM and return **in the same browser tab** without a deep link, the page restores your **last active scan** and graph state when possible.
+When you leave CPM and return **in the same browser tab** without a deep link, the page restores your **last active scan** and state when possible.
 
-### Choosing a Crypto Policy
+### Choosing a Capability Provider
 
-1. Click the **first edge** (+) from the scan node.
-2. Browse the **CP catalog** — compatible policies are selectable; incompatible ones are greyed out with a reason.
-3. Select a policy — a **draft branch** appears in the graph with a **Draft** header node, then migration steps.
+1. Browse the **candidate list** — compatible candidates are selectable; rejected ones are shown with a reason.
+2. Select a candidate to open its **solution profile card**, which shows:
+   - **Input** — wallet type, key rotation model, chain scope
+   - **Account** — account abstraction kind (e.g. ERC-4337)
+   - **Signature** — signature scheme and family
+   - **Posture** — `required_posture` to `resulting_posture` bandeau
+   - **Provider maturity** and **claim status** (see below)
 
-You can **change the draft policy** anytime by clicking the first edge again. If your draft already contains meaningful work, you must confirm before replacing it. Changing the draft **never** modifies a **persisted (recommended)** policy.
+3. Optionally adjust the **key rotation model** (`none` / `per_userop`) in the selection request; re-explore is triggered automatically.
 
-When a **persisted CP** already exists, the first edge is labeled **Prepare Replacement** (or **Change Replacement Draft** if a replacement draft exists). Selecting a policy creates a **replacement draft** while the current recommendation stays visible as a read-only **Persisted** branch.
+You can **change the draft candidate** anytime. If your draft already contains meaningful work, you must confirm before replacing it. Changing the draft **never** modifies a **persisted (recommended)** policy.
 
-### Understanding the graph
+When a **persisted CP** already exists, selecting a new candidate creates a **replacement draft** while the current recommendation stays visible as read-only.
 
-| What you see | Meaning |
+### Understanding `claim_status: declared`
+
+> **Important:** when a provider shows `claim_status: declared`, it means the provider **declared** this capability in their manifest. This is **not** an audited proof that the capability has been tested or executed independently.
+
+| Status | Meaning |
 | --- | --- |
-| Scan node only | No draft and no persisted CP for this scan |
-| **Draft** header + steps | Work-in-progress policy (not yet recommended) |
-| **Persisted** header + steps (read-only) | Current **recommended** policy for the scan |
-| **Persisted** + **Replacement Draft** branches | Recommended policy unchanged; you are preparing a possible replacement |
+| `declared` | Provider has declared this capability -- treat as a vendor claim |
+| `maturity: research` | Research-grade; not production-proven |
+| `maturity: beta` | Beta-grade; limited production exposure |
+| `maturity: production` | Production-proven at provider's discretion |
 
-Click a **policy step node** to open a **details modal** — inspection summary and editable parameters when the branch is editable.
+Do not rely on `declared` alone as evidence of post-quantum security. CAFE presents this information to inform your decision; audit and verification are outside the CAFE product scope.
+
+### Soft findings -- accept before persist
+
+Some candidates carry **soft findings** that are not blocking for selection but must be acknowledged before you can persist the policy:
+
+| Finding | Meaning |
+| --- | --- |
+| `requires_bundler` | The provider's solution requires a UserOp bundler service |
+| `requires_local_signer_state` | The provider requires local signer state management |
+
+A checklist of soft findings is presented before the wallet signature step. You must check each item to confirm you understand the operational constraints.
 
 ### Saving and persisting
 
-**Save draft** stores your work on the platform (recoverable on return). It does **not** make the policy recommended.
+**Save draft** stores your candidate selection on the platform (recoverable on return). It does **not** make the policy recommended.
 
-**Persist** makes your draft the **recommended** policy for the scan. There is **one Persist button** — no separate **Validate** step:
+**Persist** makes your draft the **recommended** policy for the scan. There is **one Persist button** -- no separate Validate step:
 
 1. Click **Persist** (or **Replace persisted policy** when replacing).
 2. The app runs a **local structural check** on the draft. If issues are found, they are listed and **no wallet signature** is requested.
-3. If the check passes, you sign with your **EOA wallet** (MetaMask or injected provider) to authorize persistence.
-4. For **replacement**, you also confirm which policy replaces which before signing.
+3. If soft findings are present, you must **accept each one** in the checklist before proceeding.
+4. If the check passes and soft findings are accepted, you sign with your **EOA wallet** (MetaMask or injected provider) to authorize persistence.
+5. For **replacement**, you also confirm which policy replaces which before signing.
 
 Deleting a **draft** or **persisted CP** always requires **confirmation**. Deleting a persisted CP does **not** require a wallet signature. Deleting a draft does not remove a persisted recommendation, and vice versa.
 
 ### Leaving the page with unsaved work
 
-If you edited a draft but have **not** saved it to the server, navigating away from CPM (another page, sign-out, or closing the tab) shows a warning with options to **Stay**, **Leave without saving**, or **Save draft** (when allowed). Saved server drafts do not trigger this warning — you can resume them later.
+If you edited a draft but have **not** saved it to the server, navigating away from CPM (another page, sign-out, or closing the tab) shows a warning with options to **Stay**, **Leave without saving**, or **Save draft** (when allowed). Saved server drafts do not trigger this warning -- you can resume them later.
 
 ### Explore without a deployable policy
 
-If no catalog policy fits your scan (for example chain scope mismatch), CPM shows an **explanation banner** with rejection reasons. This is not a broken scan — it means the catalog does not yet cover your wallet’s chain set. Platform operators monitor these cases separately.
+If no candidate fits your scan (for example chain scope mismatch, posture incompatibility, or hard provider constraint), CPM shows an **explanation banner** with rejection reasons and codes (e.g. `incompatible.provider.chain`, `incompatible.posture`). This is not a broken scan -- it means the catalog does not yet cover your wallet's configuration. Platform operators monitor these cases separately.
 
 ### Related documentation
 
-- Product rules and user stories **US1–US21**: [functional specifications — CPM UI](./functional-specifications.md#cpm-user-interface--graph-workspace-us1us21)
+- Product rules and user stories **US1-US21**: [functional specifications -- CPM UI](./functional-specifications.md#cpm-user-interface--graph-workspace-us1us21)
+- Capability Provider model: [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md)
 - Wallet signature at persist: [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md)
-
 ## Platform Status
 
 The Platform Status page is under **Platform → Status** (`/platform/status`). It shows whether the platform is operational and which service versions are deployed.

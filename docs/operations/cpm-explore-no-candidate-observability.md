@@ -4,6 +4,8 @@
 
 **Tracking:** [CPM `IMMUTABILITE_PR.md` — IMM-OPS-1…3](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/IMMUTABILITE_PR.md) · [Frontend `TODO.md` — REQ9](https://github.com/create2-labs/cafe-frontend/blob/main/TODO.md)
 
+**ADR Capability Providers (2026-08):** the rejection code set is extended with provider-level codes (`incompatible.provider.*`, `incompatible.posture`). The legacy `incompatible.chain_scope` code remains. See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) and [CPM README](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md).
+
 ---
 
 ## What this signal means
@@ -15,11 +17,16 @@
 
 This is **not** a transport or auth failure. Discovery supplied a usable wallet context, but the CPM compatibility engine found **no catalog instance** that satisfies the selection request — commonly `incompatible.chain_scope` when a requested chain is missing from `scope.chain_ids` (**all-or-nothing** on `selection_request.target_chain_ids`; see [WORKPLAN §5.1.1](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md#511-explore--périmètre-chaînes-target_chain_ids-tout-ou-rien)).
 
-Typical causes:
+Typical rejection codes (post-ADR Capability Providers):
 
-- Catalog gap (no CP covering a discovered chain, e.g. chain `56`).
-- Instance scope too narrow for the wallet’s multi-chain set.
-- Product mismatch (posture, maturity, multichain flags) — other rejection codes.
+| Code | Category | Trigger |
+| --- | --- | --- |
+| `incompatible.chain_scope` | Catalog gap | A requested chain is missing from `scope.chain_ids` (all-or-nothing on `target_chain_ids`) |
+| `incompatible.posture` | Posture mismatch | `required_posture` != `resulting_posture` from the provider SolutionProfile |
+| `incompatible.provider.chain` | Provider hard constraint | Provider does not support the requested chain |
+| `incompatible.provider.rotation` | Provider hard constraint | Provider key rotation model does not match `key_rotation_model` |
+| `incompatible.provider.wallet_type` | Provider hard constraint | Provider does not support the account type |
+| Other maturity / multichain | Product mismatch | `minimum_maturity`, `require_multichain`, `allow_new_wallet`, `address_continuity_required` |
 
 ---
 

@@ -2,10 +2,12 @@
 
 Product and integrator guide for **CP-PERSIST V1** (stateless signature-at-persist). Normative contract: [`cafe-crypto-policy-mgt` / `docs/CP_PERSIST.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CP_PERSIST.md) (Part VI frozen decisions).
 
-## Core rule
+## Core rule (updated for Capability Providers — ADR 2026-08)
 
 > A wallet can be **scanned**, **explored**, and **drafted** without proving wallet ownership.
-> A Crypto Policy can only be **persisted** for an EOA wallet after proving control via a CPM-verified signed authorization message.
+> A Crypto Policy can only be **persisted** for an EOA wallet after proving control via a CPM-verified signed authorization message **and** providing an `accepted_provider_snapshot` with pinned provider refs.
+
+Starting with **CPM-P6**, the persist payload must use `schema_version: "cafe.crypto_policy.v0.2"` and include `accepted_provider_snapshot`. Provider refs must be pinned (not `unpinned_pending_fixture`).
 
 Session JWT (Discovery) and wallet signature are **orthogonal**: JWT identifies the user/tenant; the signature proves technical control of the EOA for the persist action.
 
@@ -49,6 +51,39 @@ Replay is controlled without a server-side proof store:
 ### Binding split (frozen)
 
 The signed message binds **wallet, chain, scan, draft, action, issued_at, expires_at**. **User** and **tenant** are **not** in the signed message; CPM enforces them via session/JWT and draft/scan ownership.
+
+## Persist payload v0.2 — Capability Provider fields
+
+Starting with CPM-P6, the draft payload sent to `POST /api/cpm/v1/drafts` and persisted through `POST /api/cpm/v1/drafts/{draft_id}/persist` must include:
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `schema_version` | **Yes** | Must be `"cafe.crypto_policy.v0.2"` |
+| `template_id` | **Yes** | References the CP template |
+| `required_posture` | **Yes** | Business posture requirement |
+| `solution_profile_ref` | **Yes** | Provider + profile identifiers |
+| `accepted_provider_snapshot` | **Yes** | Snapshot with pinned refs and accepted soft findings |
+
+**`accepted_provider_snapshot` structure:**
+
+```json
+{
+  "provider_id": "nicetry",
+  "solution_profile_id": "nicetry.fors_c.erc4337.v0_1",
+  "manifest_version": "2026-08",
+  "snapshot_at": "2026-08-01T00:00:00Z",
+  "accepted_soft_findings": ["requires_bundler", "requires_local_signer_state"]
+}
+```
+
+**Gate rules at persist time:**
+
+- `schema_version` must equal `"cafe.crypto_policy.v0.2"`.
+- All `refs` in the snapshot must be **pinned** (non-empty, not `"unpinned_pending_fixture"`).
+- `accepted_soft_findings` must match (or be a superset of) the soft findings returned by explore for the selected candidate.
+- Wallet proof (signed message from `wallet-challenges`) remains required as in V1.
+
+> **Note (until CPM-P7):** the Nicetry pilot fixture ships with `unpinned_pending_fixture` refs. Persist is blocked at the gate until CPM-P7 (Pin refs Nicetry) is merged and deployed.
 
 ## End-to-end manual scenario (EOA)
 

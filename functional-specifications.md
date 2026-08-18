@@ -282,15 +282,19 @@ States: `requested` → `started` → `completed` | `failed` (or `requested` →
 #### Explore (preview)
 
 - **`POST /api/cpm/v1/policies/decisions/explore`** with `scan_id`, **`policy_context`**, `selection_request`.
-- Guards: **W7** (newest row must be `completed`), **W2** (`scan_id` must match latest completed for target), wallet-only (**TLS → 404**).
+- Guards: **W7** (newest row must be `completed`), **W2** (`scan_id` must match latest completed for target), wallet-only (**TLS -> 404**).
+- **`selection_request` key fields (v0.1):** `target_posture` (stable wire alias for required posture); `key_rotation_model: "none" | "per_userop"` (replaces removed `key_rotation_required` bool); standard chain/multichain/continuity/maturity fields.
+- **Capability Provider ranking (ADR 2026-08):** CPM ranks instances by matching `required_posture` against the provider SolutionProfile `resulting_posture`. Hard compat codes: `incompatible.posture`, `incompatible.provider.chain`, `incompatible.provider.rotation`, `incompatible.provider.wallet_type`. Response carries `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, and soft findings (`requires_bundler`, `requires_local_signer_state`). No `graphEdges` / `nodeInstances` / `node_path` in response.
+- **`claim_status: "declared"`** means the provider declared this capability -- it is **not** an audited or executed proof.
 - **Chain scope (all-or-nothing):** every id in `selection_request.target_chain_ids` must appear in a candidate instance `scope.chain_ids` for that candidate to be deployable. Partial coverage is rejected (e.g. `incompatible.chain_scope` when chain `56` is observed and requested but absent from catalog scope).
-- **No deployable candidate (HTTP 200):** when no ranked candidate remains and `rejected_candidates` is non-empty, the response is still **success** — not an error. The SPA explains why (**REQ8** / **FE-IMM-13**). Platform ops consume **REQ9** observability ([operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md)): structured log `cpm.explore.no_deployable_candidate`, counter `cpm_explore_no_deployable_candidate_total`, Grafana dashboard **IMM-OPS-2**.
+- **No deployable candidate (HTTP 200):** when no ranked candidate remains and `rejected_candidates` is non-empty, the response is still **success** -- not an error. The SPA explains why (**REQ8** / **FE-IMM-13**). Platform ops consume **REQ9** observability ([operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md)): structured log `cpm.explore.no_deployable_candidate`, counter `cpm_explore_no_deployable_candidate_total`, Grafana dashboard **IMM-OPS-2**.
 
-#### Persist (EOA — CP-PERSIST V1)
+#### Persist (EOA -- CP-PERSIST V1)
 
-- **Normative EOA path:** `POST /api/cpm/v1/wallet-challenges` (mandatory stateless canonical message) → EIP-191 / `personal_sign` → **`POST /api/cpm/v1/drafts/{draft_id}/persist`** with `signed_message` + `signature`.
-- **Wallet proof required** for persist. Scan, explore, and platform draft save do **not** require proof (non-regression S1–S3).
-- Same immutability guards as explore (**W7**, **W2**, wallet-only, TLS → **404**).
+- **Normative EOA path:** `POST /api/cpm/v1/wallet-challenges` (mandatory stateless canonical message) -> EIP-191 / `personal_sign` -> **`POST /api/cpm/v1/drafts/{draft_id}/persist`** with `signed_message` + `signature`.
+- **Wallet proof required** for persist. Scan, explore, and platform draft save do **not** require proof (non-regression S1-S3).
+- **Persist payload v0.2 (ADR 2026-08):** payload must use `schema_version: "cafe.crypto_policy.v0.2"` with `accepted_provider_snapshot` (includes `solution_profile_ref`, pinned refs, and `accepted_soft_findings`). Refs must not be `unpinned_pending_fixture`.
+- Same immutability guards as explore (**W7**, **W2**, wallet-only, TLS -> **404**).
 - Legacy **`POST /api/cpm/v1/policies`** is **not** the normative EOA persist endpoint; Discovery-bound EOA payloads without signed authorization return **403** `WALLET_CONTROL_PROOF_REQUIRED`.
 - V1 persist is **EOA-only**; non-EOA drafts return **422** `UNSUPPORTED_WALLET_TYPE` on persist routes.
 - Details: [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md).
@@ -405,7 +409,7 @@ Authenticated users can confirm which **deployed builds** are running from **Pla
 
 ### CPM user interface — graph workspace (US1–US21)
 
-The **Crypto Policy Management** page (`/crypto-policy-management`) is a **graph-first workspace** for EOA wallet scans only. TLS scans are never CPM targets. Normative UI acceptance criteria live in [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) (delivery epics **CPM-UI-1…8**).
+The **Crypto Policy Management** page (`/crypto-policy-management`) is a **Capability Provider workspace** for EOA wallet scans only. TLS scans are never CPM targets. The UI shows a **solution profile view** (scénario A): candidate list + structured provider card (input / account / signature / posture blocks). No policy graph (nodes/edges) in the normative UI. Normative UI acceptance criteria live in [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) (delivery epics **CPM-UI-1...8**). See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
 
 #### Vocabulary (UI)
 
