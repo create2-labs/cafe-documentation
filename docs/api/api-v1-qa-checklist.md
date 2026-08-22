@@ -30,15 +30,17 @@ Both version endpoints return `{"version":"<deploy-tag>"}` with no auth.
 
 ## CPM Checks
 
-- Policy catalog, templates, instances, drafts, policies, and explore examples use `/api/cpm/v1`.
-- `POST /api/cpm/v1/policies/decisions/explore` is described as synchronous preview and non-persistent.
-- Explore may return HTTP **200** with empty selection and `rejected_candidates` (e.g. `incompatible.chain_scope`); ops runbook and IMM-OPS observability are documented in [CPM explore observability](../operations/cpm-explore-no-candidate-observability.md).
+- Crypto Policies and providers catalogue examples use `GET /api/cpm/v1/crypto-policies` and `GET /api/cpm/v1/providers` (not retired `/policies/templates|instances|catalog`).
+- Drafts, policies, and explore examples use `/api/cpm/v1`.
+- `POST /api/cpm/v1/policies/decisions/explore` is described as synchronous couche A preview (v0.2: `crypto_policy_id` + `policy_context`) and non-persistent; output `scan_compatible_providers`; legacy explore → **400**.
+- Explore may return HTTP **200** with empty `scan_compatible_providers` and `rejected_candidates` (runtime signal `runtime.no_scan_compatible`); ops runbook and IMM-OPS observability are documented in [CPM explore observability](../operations/cpm-explore-no-candidate-observability.md).
+- Persist docs mention `crypto_policy_id` + `user_constraints` and `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` for couche B KO.
 - `GET /metrics` on CPM is documented as public application metrics (**IMM-OPS-1**).
 - CPM `GET /version` (direct) and `GET /api/cpm/version` (edge) are documented as public deploy version (**CPM-OPS-3**); same JSON contract as Discovery `/api/version`.
 - Platform Status docs mention Frontend, Discovery, and CPM version tiles (**CPM-UI-7A**).
-- `POST /api/cpm/v1/policies/assessment/request` is described as the async assessment trigger.
+- `POST /api/cpm/v1/policies/assessment/request` is described as the async assessment trigger with body `scan_id` + `crypto_policy_id` only.
 - Assessment request is wallet-scan only.
-- Assessment request rejects client `policy_context`.
+- Assessment request rejects client `policy_context` and legacy `selection_request`.
 - Unknown, unauthorized, TLS, or non-wallet `scan_id` values return `404` on assessment request.
 - Discovery lookup outages return `503` and must not emit `policy.assessment.requested.v0.1`.
 

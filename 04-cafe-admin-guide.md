@@ -6,6 +6,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 ## Document Versioning
 
+- v0.7.0
+  - Date: August 22nd, 2026
+  - Comments: Rewrite **CPM catalogue administration** for two-layer amendement: Crypto Policies (`CPM_CRYPTO_POLICY_PATHS`) + provider manifests (`CPM_PROVIDER_MANIFEST_PATHS`); routes `/crypto-policies` + `/providers`; ADR §7.2.1 signals (catalogue family 1 + runtime family 2); Nicetry refs pinned (CPM-P7 done); diagnose curl uses explore v0.2 (`crypto_policy_id` + `policy_context`).
 - v0.6.0
   - Date: August 18th, 2026
   - Comments: Update **CPM catalog administration** for Capability Provider model (ADR 2026-08): `ProviderManifest` + `SolutionProfile` files via `CPM_PROVIDER_MANIFEST_PATHS`; catalog is now template + instance + provider manifest (three layers); pin refs (`unpinned_pending_fixture` rejected at persist gate); RAZ fixtures procedure.
@@ -58,7 +61,7 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
       4. [Constraints before any purge](#constraints-before-any-purge)
       5. [pgweb (manual Postgres UI)](#pgweb-manual-postgres-ui)
    8. [Authentication and internal tokens (operator view)](#authentication-and-internal-tokens-operator-view)
-   9. [CPM catalog administration](#cpm-catalog-administration)
+   9. [CPM catalogue administration](#cpm-catalogue-administration)
       1. [Three layers (must stay consistent)](#three-layers-must-stay-consistent)
       2. [Source files (repository)](#source-files-repository)
       3. [Environment variables](#environment-variables)
@@ -555,31 +558,28 @@ Browser: **`http://localhost:8080/signup`** / **`http://localhost:8080/signin`**
 
 ---
 
-## CPM catalog administration
+## CPM catalogue administration
 
-The **CP catalog** is not a single database table. CPM loads **static JSON files at startup** and serves them through read APIs. Changing the catalog requires new or updated files and a **CPM process restart** (new container / redeploy).
+The **CP catalogue** is not a single database table. CPM loads **static JSON files at startup** and serves them through read APIs. Changing the catalogue requires new or updated files and a **CPM process restart** (new container / redeploy).
 
-### Three layers (must stay consistent)
+### Two layers (must stay consistent)
 
-Starting with **CPM-P1-P6b** (ADR 2026-08), the catalog model is:
+Starting with **CPM-P8** (ADR amendement 2026-08), the catalogue model is:
 
 ```text
 provider_manifest_*.json            -> ProviderManifest: SolutionProfile(s) + refs (provider layer)
         |
-crypto_policy_template_*.json       -> reusable CP templates (required_posture, constraints)
-        |
-crypto_policy_instance_*.json       -> deployable instances (template_id + solution_profile_ref + scope)
+crypto_policy_*.json                -> Crypto Policy intention: required_posture + allowed_providers
 ```
 
-> **Note:** the legacy `policy_graph_catalog_valid.json` (nodes / transitions / `node_path`) is **removed** from the normative catalog. Do not add new graph catalog files. Templates and instances no longer carry `node_path` as a business field.
+> **Retired:** template/instance catalogue files and routes (`/policies/templates`, `/policies/instances`, `/policies/catalog`, `CPM_POLICY_TEMPLATE_PATHS`, `CPM_POLICY_INSTANCE_PATHS`). Do not document them as live. Legacy `policy_graph_catalog_valid.json` remains removed.
 
 | Layer | API | What operators configure |
 | --- | --- | --- |
-| Provider manifests | loaded at startup via `CPM_PROVIDER_MANIFEST_PATHS` | `ProviderManifest` files per Capability Provider |
-| Templates | `GET /api/cpm/v1/policies/templates` via `CPM_POLICY_TEMPLATE_PATHS` | One file per CP template (with `required_posture`) |
-| Instances | `GET /api/cpm/v1/policies/instances` via `CPM_POLICY_INSTANCE_PATHS` | One file per deployable instance (with `solution_profile_ref`) |
+| Provider manifests | `GET /api/cpm/v1/providers` via `CPM_PROVIDER_MANIFEST_PATHS` | `ProviderManifest` files per Capability Provider |
+| Crypto Policies | `GET /api/cpm/v1/crypto-policies` via `CPM_CRYPTO_POLICY_PATHS` | One file per CP (`required_posture` + `allowed_providers`) |
 
-**Critical rule:** a template alone does not make a CP selectable. Explore ranks **instances**. An instance must reference a `template_id` and a `solution_profile_ref` pointing to a loaded provider manifest, and its `scope.chain_ids` must cover **every** chain in `selection_request.target_chain_ids` (**all-or-nothing**).
+**Critical rule:** a Crypto Policy is **intention only** (`required_posture` + `allowed_providers`). There is no `default_selection`. Explore (**couche A**) resolves providers from `allowed_providers` against loaded manifests and returns **scan-compatible** providers. User constraints (**couche B**) apply at persist (and as an indicative UI filter), not as catalogue rows.
 
 ### Source files (repository)
 
@@ -587,45 +587,41 @@ Canonical fixtures live in **cafe-crypto-policy-mgt**:
 
 ```
 internal/domain/provider/testdata/
-+-- provider_manifest_nicetry_v0_1.json       <- ProviderManifest (Nicetry pilot)
++-- provider_manifest_nicetry_v0_1.json       <- ProviderManifest (Nicetry pilot; refs pinned)
 internal/domain/policy/testdata/
-+-- crypto_policy_template_pq_account_validation_v1.json
-+-- crypto_policy_instance_nicetry_v1.json    <- carries solution_profile_ref
++-- crypto_policy_pq_account_validation_v1.json  <- id cpm_pq_account_validation_v1
 +-- (+ invalid_* fixtures for tests only)
 ```
 
 Validation logic: `internal/domain/provider/`, `internal/domain/policy/`.
 Loader: `internal/api/read_api.go` -> `LoadReadStore()` + `LoadProviderManifestFromFile()`.
 
-In the **CPM Docker image**, files are copied to `/app/policy/` and `/app/providers/` (`Dockerfile-cpm`).
+In the **CPM Docker image**, files are copied under `/app/policy/` (`Dockerfile-cpm`).
 
 ### Environment variables
 
 | Variable | Default (image) | Meaning |
 | --- | --- | --- |
-| `CPM_PROVIDER_MANIFEST_PATHS` | comma-separated manifest JSON paths | One entry per Capability Provider manifest |
-| `CPM_POLICY_TEMPLATE_PATHS` | comma-separated template JSON paths | One entry per CP template |
-| `CPM_POLICY_INSTANCE_PATHS` | comma-separated instance JSON paths | One entry per deployable instance |
+| `CPM_PROVIDER_MANIFEST_PATHS` | `/app/policy/provider_manifest_nicetry_v0_1.json` | Comma-separated Capability Provider manifests |
+| `CPM_CRYPTO_POLICY_PATHS` | `/app/policy/crypto_policy_pq_account_validation_v1.json` | Comma-separated Crypto Policy JSON paths |
 
 Example (local `go run` with fixtures):
 
 ```bash
 export CPM_AUTH_REQUIRED=false
 export CPM_PROVIDER_MANIFEST_PATHS=internal/domain/provider/testdata/provider_manifest_nicetry_v0_1.json
-export CPM_POLICY_TEMPLATE_PATHS=internal/domain/policy/testdata/crypto_policy_template_pq_account_validation_v1.json
-export CPM_POLICY_INSTANCE_PATHS=internal/domain/policy/testdata/crypto_policy_instance_nicetry_v1.json
+export CPM_CRYPTO_POLICY_PATHS=internal/domain/policy/testdata/crypto_policy_pq_account_validation_v1.json
 go run ./cmd/cafe-cpm
 ```
 
-Multiple providers / templates / instances -- comma-separated paths (trim-safe):
+Multiple providers / policies -- comma-separated paths (trim-safe):
 
 ```bash
-export CPM_PROVIDER_MANIFEST_PATHS=/app/providers/nicetry.json,/app/providers/another.json
-export CPM_POLICY_TEMPLATE_PATHS=/app/policy/tpl_a.json,/app/policy/tpl_b.json
-export CPM_POLICY_INSTANCE_PATHS=/app/policy/inst_a.json,/app/policy/inst_b.json
+export CPM_PROVIDER_MANIFEST_PATHS=/app/policy/nicetry.json,/app/policy/another.json
+export CPM_CRYPTO_POLICY_PATHS=/app/policy/cp_a.json,/app/policy/cp_b.json
 ```
 
-**Deploy note:** `cafe-deploy` compose does not override these by default; the running catalog is whatever is **baked into** `oleglod/cafe-cpm:${CPM_VERSION}`. To change catalog content in dev:
+**Deploy note:** `cafe-deploy` compose does not override these by default; the running catalogue is whatever is **baked into** `oleglod/cafe-cpm:${CPM_VERSION}`. To change catalogue content in dev:
 
 1. Edit or add JSON under the relevant `testdata/` directories.
 2. Update defaults in `internal/config/config.go` **or** set env vars in `compose/25-cpm.yml` / env file.
@@ -638,89 +634,113 @@ A `ProviderManifest` declares one or more `SolutionProfile`(s), each with:
 - `solution_profile_id` -- stable identifier
 - `resulting_posture` -- what the provider achieves (e.g. `hybrid`)
 - `signature` -- `scheme` + `family` (e.g. ERC-4337 + ML-DSA)
+- `suggested_user_constraints` -- indicative defaults for the UI constraints panel
 - `refs` -- commit/version pointers for pinned verification
 
-**`unpinned_pending_fixture`** is a placeholder for development. CPM's **persist gate rejects** any snapshot whose refs carry `unpinned_pending_fixture`. To enable normative persist, refs must be replaced with real commit/version hashes (done in **CPM-P7** -- Pin refs Nicetry).
+**`unpinned_pending_fixture`** is rejected by the persist gate. The shipped Nicetry fixture refs are **pinned** (**CPM-P7** done). Explore, draft, and normative persist work with the pinned fixture; any snapshot that still carries `unpinned_pending_fixture` (or empty commit/version) fails the gate.
 
-Until CPM-P7 is merged, the Nicetry pilot runs with `unpinned_pending_fixture`. Explore and draft work normally; only the persist gate is blocked.
+### Catalogue startup signals (ADR §7.2.1 family 1 / CPM-P11a)
 
-### RAZ fixtures -- dev catalog reset
+After loading Crypto Policies and manifests, CPM emits structured **signals** (prefer this term over “alarmes” alone):
 
-When changing catalog fixtures during development:
+| Severity | When | Counter (optional) |
+| --- | --- | --- |
+| `WARN catalogue: posture orphanage …` | CP has empty `allowed_providers` or no allowed profile with `resulting_posture == required_posture` | `cpm_catalogue_posture_orphan_total` |
+| `ERROR catalogue: malformed suggested_user_constraints …` | Profile suggestions contradict `constraints` / signature; profile marked `Erroneous` | `cpm_catalogue_malformed_manifest_total` |
+
+These fire at **startup/load**, not per scan. Chain `planned` / wallet type are **not** part of the static posture-orphan check.
+
+### Runtime signals (ADR §7.2.1 family 2 / CPM-P11b)
+
+Contextual to a scan + Crypto Policy (+ user constraints). Distinct from catalogue startup:
+
+| Signal | When | Log / metric |
+| --- | --- | --- |
+| No scan-compatible | Explore HTTP 200, empty `scan_compatible_providers`, non-empty `rejected_candidates` | `event=cpm.explore.no_deployable_candidate` + `adr_signal=runtime.no_scan_compatible` ; `cpm_explore_no_deployable_candidate_total` |
+| Couche B KO | Persist `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` | `event=cpm.persist.user_constraints_incompatible` + `adr_signal=runtime.no_provider_after_user_constraints` ; `cpm_persist_user_constraints_incompatible_total` |
+
+Full explore diagnosis: [operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md).
+
+### RAZ fixtures -- dev catalogue reset
+
+When changing catalogue fixtures during development:
 
 1. Stop CPM (`docker stop cafe-cpm-dev` or equivalent).
-2. Replace fixture files (template, instance, and/or provider manifest).
-3. **RAZ DB drafts**: delete in-progress drafts that reference the old catalog IDs (or run full dev DB wipe if safe):
+2. Replace fixture files (Crypto Policy and/or provider manifest).
+3. **RAZ DB drafts**: delete in-progress drafts that reference the old catalogue IDs (or run full dev DB wipe if safe):
    ```bash
    # Soft delete orphaned drafts (dev only -- never in production without sign-off)
    docker exec -e PGPASSWORD=cafe cafe-postgres-dev psql -U cafe -d cafe \
      -c "UPDATE crypto_policy_drafts SET deleted_at=NOW() WHERE deleted_at IS NULL;"
    ```
 4. Rebuild and restart CPM.
-5. Verify via `GET /api/cpm/v1/policies/templates` and `GET /api/cpm/v1/policies/instances`.
+5. Verify via `GET /api/cpm/v1/crypto-policies` and `GET /api/cpm/v1/providers`.
 
 ### Procedure: add a second Capability Provider
 
-1. **New provider manifest file** -- unique `provider_id`, `manifest_version`, `solution_profiles[]` with `resulting_posture`, `signature`, refs. Register in `CPM_PROVIDER_MANIFEST_PATHS`.
+1. **New provider manifest file** -- unique `provider_id`, `manifest_version`, `solution_profiles[]` with `resulting_posture`, `signature`, pinned refs, optional `suggested_user_constraints`. Register in `CPM_PROVIDER_MANIFEST_PATHS`.
 
-2. **New template file** -- unique `id`, `name`, `version`, `required_posture`, constraints. No `node_path`. Register in `CPM_POLICY_TEMPLATE_PATHS`.
+2. **New or updated Crypto Policy file** -- unique `id`, `name`, `version`, `required_posture`, `allowed_providers` including the new `provider_id`. Register in `CPM_CRYPTO_POLICY_PATHS`.
 
-3. **New instance file** -- unique `id`, `template_id`, `solution_profile_ref` pointing to the new provider+profile, `scope.chain_ids`. Register in `CPM_POLICY_INSTANCE_PATHS`.
-
-4. **Validate locally:**
+3. **Validate locally:**
 
    ```bash
    cd cafe-crypto-policy-mgt
    go test -tags dev ./...
    ```
 
-5. **Rebuild and restart CPM**, then verify APIs with a user JWT:
+4. **Rebuild and restart CPM**, then verify APIs with a user JWT:
 
    ```bash
-   curl -fsS "${CPM_BASE}/api/cpm/v1/policies/templates" \
+   curl -fsS "${CPM_BASE}/api/cpm/v1/crypto-policies" \
      -H "Authorization: Bearer ${TOKEN}" \
-     | jq '[.items[] | {id, name, required_posture}]'
+     | jq '[.items[] | {id, name, required_posture, allowed_providers}]'
 
-   curl -fsS "${CPM_BASE}/api/cpm/v1/policies/instances" \
+   curl -fsS "${CPM_BASE}/api/cpm/v1/providers" \
      -H "Authorization: Bearer ${TOKEN}" \
-     | jq '[.items[] | {id, template_id, solution_profile_ref, chain_ids: .scope.chain_ids}]'
+     | jq '[.items[] | {provider_id, manifest_version}]'
    ```
 
-6. **Verify explore** for a real wallet scan (see **Diagnose CPM explore** below). The new candidate should appear ranked (or rejected with an explicit code).
+5. **Verify explore** for a real wallet scan (see **Diagnose CPM explore** below). The new provider should appear in `scan_compatible_providers` (or in `rejected_candidates` with an explicit code).
 
-### Common catalog mistakes
+### Common catalogue mistakes
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| Only one CP in UI picker | Single template path configured | Add second template JSON + env path |
-| Candidate rejected "incompatible.posture" | `required_posture` != `resulting_posture` on provider | Fix manifest `resulting_posture` or template `required_posture` |
-| Candidate rejected "incompatible.chain_scope" | `scope.chain_ids` narrower than wallet chains | Extend `scope.chain_ids` or add new instance |
-| Persist returns 400 `CRYPTO_POLICY_PAYLOAD_INVALID` | `schema_version` empty or not `v0.2`, or unpinned refs | Use `cafe.crypto_policy.v0.2` and wait for CPM-P7 to pin refs |
-| CPM fails to start | Invalid JSON in manifest/template/instance | Check startup logs; run `go test -tags dev ./...` |
-| Catalog unchanged after edit | Old image still running | Rebuild `cafe-cpm` image and restart container |
-### Persisted policies vs catalog
+| Only one CP in UI picker | Single Crypto Policy path configured | Add second CP JSON + env path |
+| Candidate rejected "incompatible.posture" | `required_posture` != `resulting_posture` on provider | Fix manifest `resulting_posture` or CP `required_posture` |
+| Empty `scan_compatible_providers` / chain codes | Provider chain support narrower than wallet chains | Extend provider chain support or adjust CP `allowed_providers` |
+| Persist returns 400 `CRYPTO_POLICY_PAYLOAD_INVALID` | `schema_version` empty or not `v0.2`, missing `crypto_policy_id` / `user_constraints`, or unpinned refs | Use `cafe.crypto_policy.v0.2` with pinned snapshot |
+| Persist returns 400 `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` | Couche B KO after explore was scan-compatible | Adjust `user_constraints` or choose another provider |
+| Catalogue startup WARN posture orphanage | CP has no posture-matching allowed profile | Fix `allowed_providers` / profile `resulting_posture` |
+| CPM fails to start | Invalid JSON in manifest/CP | Check startup logs; run `go test -tags dev ./...` |
+| Catalogue unchanged after edit | Old image still running | Rebuild `cafe-cpm` image and restart container |
 
-**Owner persisted policies** (`GET /api/cpm/v1/policies`, drafts) are separate from the static catalog. Catalog changes do **not** mutate user drafts or persisted CPs. Users keep existing work; new explore only affects new selections.
+### Persisted policies vs catalogue
+
+**Owner persisted policies** (`GET /api/cpm/v1/policies`, drafts) are separate from the static catalogue. Catalogue changes do **not** mutate user drafts or persisted CPs. Users keep existing work; new explore only affects new selections.
 
 ---
 
 ## Observability and incidents
 
-### CPM explore — no deployable candidate (REQ9)
+### CPM explore — no scan-compatible provider (REQ9)
 
 When users see “no policy applies” but HTTP is healthy, use the dedicated runbook:
 
-**[CPM explore — no deployable candidate (observability & admin diagnosis)](./docs/operations/cpm-explore-no-candidate-observability.md)**
+**[CPM explore — no scan-compatible provider (observability & admin diagnosis)](./docs/operations/cpm-explore-no-candidate-observability.md)**
 
 Summary for admins:
 
 | Signal | Where |
 | --- | --- |
 | User-facing explanation | SPA `CpmExploreRejectionBanner` (REQ8) |
-| Structured log | `cpm.explore.no_deployable_candidate` in `docker logs cafe-cpm-*` |
+| Runtime signal (family 2) | `cpm.explore.no_deployable_candidate` + `adr_signal=runtime.no_scan_compatible` |
+| Structured log | `docker logs cafe-cpm-*` |
 | Counter | `cpm_explore_no_deployable_candidate_total` on `GET /metrics` |
+| Couche B (separate) | `cpm.persist.user_constraints_incompatible` + `adr_signal=runtime.no_provider_after_user_constraints` |
 | Dashboard | Grafana **CAFE - CPM Explore Rejections** |
-| Alert | `CpmExploreIncompatibleChainScopeSustained` (sustained `incompatible.chain_scope`) |
+| Alert | `CpmExploreIncompatibleChainScopeSustained` (sustained chain-scope style rejections) |
 
 **Privacy:** never put `scan_id`, wallet address, or per-chain ids on Prometheus labels. Use logs or API explore JSON for investigation.
 
@@ -753,10 +773,10 @@ Minimal workflow when supporting a user report. Full detail: [operations runbook
 export DISCOVERY_BASE='http://localhost:8080'
 export CPM_BASE='http://localhost:8082'
 # minikube edge alternative (ingress on :8080):
-# export DISCOVERY_BASE='http://localhost:8080/api'   # then use /auth/signin under EDGE — prefer:
 # export EDGE_BASE='http://localhost:8080'
 # TOKEN via POST ${EDGE_BASE}/api/auth/signin ; Discovery calls via ${EDGE_BASE}/api/discovery/v1/...
 export SCAN_ID='<scan-uuid>'
+export CRYPTO_POLICY_ID='cpm_pq_account_validation_v1'
 
 TOKEN=$(curl -fsS -X POST "${DISCOVERY_BASE}/auth/signin" \
   -H 'Content-Type: application/json' \
@@ -772,37 +792,35 @@ curl -fsS -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
   -H 'X-Request-Id: admin-diagnose-1' \
   -d "$(jq -nc \
     --arg scan_id "$SCAN_ID" \
+    --arg cp "$CRYPTO_POLICY_ID" \
     --argjson pc "$(jq -c '{
+      scan_id: .scan_id,
       wallet_address: .result.wallet_address,
       wallet_type: .result.wallet_type,
       chain_ids: .result.chain_ids,
       current_algorithm: (.result.current_algorithm // "secp256k1_ecrecover"),
       current_pq_posture: .result.current_pq_posture,
-      scanned_at: .result.scanned_at
+      scanned_at: .result.scanned_at,
+      status: .status
     }' <<<"$DETAIL")" \
-    --argjson chains "$(jq -c '.result.chain_ids' <<<"$DETAIL")" \
     '{
       scan_id: $scan_id,
-      policy_context: $pc,
-      selection_request: {
-        target_posture: "hybrid",
-        target_chain_ids: $chains,
-        require_multichain: (($chains | length) > 1),
-        allow_new_wallet: false,
-        address_continuity_required: true,
-        minimum_maturity: 1,
-        approval_mode: "manual"
-      }
+      crypto_policy_id: $cp,
+      policy_context: $pc
     }')" | jq '{
-      selected: .decision.selected_policy_id,
+      scan_compatible: [.decision.scan_compatible_providers[]? | {
+        candidate: .candidate_id,
+        provider: .solution_profile_ref.provider_id,
+        posture: .resulting_posture
+      }],
       rejections: [.decision.rejected_candidates[]? | {
-        template: .template_id,
+        crypto_policy_id: .crypto_policy_id,
         codes: [.rejection_reasons[]?.code]
       }]
     }'
 ```
 
-Compare `selection_request.target_chain_ids` with each instance `scope.chain_ids` from `GET /policies/instances`.
+Compare wallet `chain_ids` from Discovery detail with provider chain support from `GET /providers` and the CP’s `allowed_providers` from `GET /crypto-policies`.
 
 ---
 
@@ -812,13 +830,13 @@ Compare `selection_request.target_chain_ids` with each instance `scope.chain_ids
 | --- | --- | --- |
 | “Cannot signup / empty `users` table” (minikube) | Browser URL must be **`http://localhost:8080`** with ingress port-forward; Network tab `POST /api/auth/signup` | If **405**, user hit `cafe-frontend` alone — switch to ingress. Turnstile dummy token `XXXX.DUMMY.TOKEN.XXXX` is OK in dev |
 | “No wallet scan on CPM page” | Discovery scans exist, scan `completed` | W7 gate — newest scan must be completed; see functional specs |
-| “Policy greyed out / incompatible” | Explore rejection code | Catalog instance `scope.chain_ids` vs scan chains |
+| “Policy greyed out / incompatible” | Explore rejection code | Catalogue CP `allowed_providers` + provider chain/posture vs scan |
 | “Cannot delete scan” | `409 SCAN_REFERENCED_BY_POLICY` | User must delete or rebind CPM policy first (W3/W4) |
 | “CPM page errors / session” | Browser network tab on `/api/cpm/v1` | CPM auth env, Discovery session validation URL |
-| “Persist failed” | Wallet challenge + draft state | [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md) |
+| “Persist failed” / constraints incompatible | Wallet challenge + draft + `user_constraints` | [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md); couche B signal if `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` |
 | Draft on old scan after rescan | Orphan draft (FE-IMM-4) | User must **Rebind to last scan** in CPM UI — not automatic |
 
-Admins do **not** mutate user drafts or persisted policies through catalog files. Catalog is read-only platform configuration.
+Admins do **not** mutate user drafts or persisted policies through catalogue files. Catalogue is read-only platform configuration.
 
 ---
 
@@ -831,20 +849,21 @@ Admins do **not** mutate user drafts or persisted policies through catalog files
 
 ---
 
-## Verification checklist (after catalog or CPM deploy)
+## Verification checklist (after catalogue or CPM deploy)
 
 - [ ] `GET /healthz` and `/api/cpm/healthz` succeed
 - [ ] `GET /version` (Discovery direct) and `/api/version` (edge) return `{"version":"…"}`
 - [ ] `GET /version` (CPM direct) and `/api/cpm/version` (edge) return `{"version":"…"}`
 - [ ] Platform Status → Version Information shows Frontend, Discovery, and CPM versions (or `Unknown` when a service is down)
-- [ ] `GET /api/cpm/v1/policies/templates` returns expected template count with `required_posture`
-- [ ] `GET /api/cpm/v1/policies/instances` shows correct `scope.chain_ids` and `solution_profile_ref`
-- [ ] Explore smoke with a known `scan_id` selects a candidate (or expected rejection documented); response has `resulting_posture`, `claim_status`, no `graphEdges`
-- [ ] Explore `selection_request` uses `key_rotation_model` (`none`/`per_userop`) — not `key_rotation_required`
+- [ ] `GET /api/cpm/v1/crypto-policies` returns expected CPs with `required_posture` + `allowed_providers`
+- [ ] `GET /api/cpm/v1/providers` shows expected manifests / solution profiles
+- [ ] Explore smoke with a known `scan_id` + `crypto_policy_id` returns `scan_compatible_providers` (or expected rejections); response has `resulting_posture`, `claim_status`, `suggested_user_constraints`, no `graphEdges`
+- [ ] Legacy explore body with `selection_request` returns **400**
+- [ ] Persist smoke uses `cafe.crypto_policy.v0.2` with `crypto_policy_id` + `user_constraints` (Nicetry refs pinned)
 - [ ] Prometheus target `cafe-cpm-api` UP
-- [ ] Frontend built with `VITE_CPM_DATA_SOURCE=api` if testing real catalog in UI
+- [ ] Frontend built with `VITE_CPM_DATA_SOURCE=api` if testing real catalogue in UI
 - [ ] `go test -tags dev ./...` passed in `cafe-crypto-policy-mgt` before image publish
-- [ ] Provider manifest loaded: `CPM_PROVIDER_MANIFEST_PATHS` set and CPM startup logs show manifest loaded
+- [ ] Provider manifest + Crypto Policy loaded: `CPM_PROVIDER_MANIFEST_PATHS` and `CPM_CRYPTO_POLICY_PATHS` set; startup logs show load (and any catalogue signals)
 
 ---
 

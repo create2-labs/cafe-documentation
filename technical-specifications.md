@@ -238,7 +238,7 @@ Contract matches Discovery `GET /version` / `GET /api/version`. Consumed by Plat
 
 ### Explore no-deployable-candidate observability (IMM-OPS-1…2)
 
-When explore returns HTTP **200** with empty selection and non-empty `rejected_candidates`, CPM emits **one** structured log and **one** Prometheus increment per qualifying event (dominant `rejection_code` only — not one increment per rejection reason). Admin `curl` workflow and diagnosis checklist: [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md). Catalog configuration: [04-cafe-admin-guide.md](./04-cafe-admin-guide.md#cpm-catalog-administration).
+When explore returns HTTP **200** with empty `scan_compatible_providers` and non-empty `rejected_candidates`, CPM emits **one** structured log and **one** Prometheus increment per qualifying event (dominant `rejection_code` only — not one increment per rejection reason). Admin `curl` workflow and diagnosis checklist: [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md). Catalogue configuration: [04-cafe-admin-guide.md](./04-cafe-admin-guide.md#cpm-catalogue-administration).
 
 | Component | Artifact |
 | --- | --- |
@@ -249,7 +249,7 @@ When explore returns HTTP **200** with empty selection and non-empty `rejected_c
 #### Hook (IMM-OPS-1)
 
 - **Where:** `internal/api/read_api.go` (`DecisionExplore`) calls `recordExploreNoDeployableCandidate` in `internal/api/explore_observability.go` — after `PolicyDecisionEvaluator.Evaluate`, before `respondJSON(200)`.
-- **Condition:** `len(ranked_candidates)==0` **and** `len(rejected_candidates)>0`.
+- **Condition:** `len(scan_compatible_providers)==0` **and** `len(rejected_candidates)>0` (runtime signal `adr_signal=runtime.no_scan_compatible`).
 - **Not instrumented:** HTTP errors (400 W7/W2, auth), explore with a selected candidate, explore with empty `rejected_candidates`.
 - **Response body:** unchanged (observability is side-effect only).
 
@@ -476,4 +476,4 @@ cd cafe-deploy/scripts
 | [WORKPLAN_API.md](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) | Normative API workplan |
 | [cafe-discovery README](https://github.com/create2-labs/cafe-discovery/blob/main/README.md) | Service operations |
 | [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) | Deploy and scripts |
-| [cpm-auth-only-contract.md](./docs/security/cpm-auth-only-contract.md) | CPM security contract |
+| [cpm-contract.md](./docs/security/cpm-contract.md) | CPM security contract |
