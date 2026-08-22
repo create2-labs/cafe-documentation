@@ -17,32 +17,32 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### User Guide
 
-- **[02-cafe-user-guide.md](./02-cafe-user-guide.md)** — Complete user guide for the CAFE frontend: navigation (Discovery, Platform, CPM, Remediation), **Crypto Policy Management** graph workflow, account-based access, and all features
+- **[02-cafe-user-guide.md](./02-cafe-user-guide.md)** — Complete user guide for the CAFE frontend: navigation (Discovery, Platform, CPM, Remediation), **Crypto Policy Management** two-layer workflow (catalogue Crypto Policy → scan-compatible providers → user constraints → persist), account-based access, and all features
 
 ### Developer Guide
 
-- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including **dual local deployments** (cafe-deploy Compose + cafe-expresso minikube), edge at **`http://localhost:8080`** on minikube for signup/signin, scan `scan_id` correlation, CPM-owned policy assessment, **Capability Provider explore** (`key_rotation_model`, `resulting_posture`, `solution_profile_ref`), **persist payload v0.2** (`accepted_provider_snapshot`), and QA sign-off checks.
+- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including **dual local deployments** (cafe-deploy Compose + cafe-expresso minikube), edge at **`http://localhost:8080`** on minikube for signup/signin, scan `scan_id` correlation, CPM-owned policy assessment, **catalogue** (`/crypto-policies`, `/providers`), **explore v0.2** (`crypto_policy_id` + `policy_context` → `scan_compatible_providers`), **persist v0.2** (`user_constraints` + `accepted_provider_snapshot`), and QA sign-off checks.
 
 ### Admin Guide
 
-- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) — Platform administration for **Compose and minikube**: environments, Helm/kubectl deploy, ingress edge, **Cloudflare Tunnel** (home / no inbound ports), deploy and health checks (`/api/version`, `/api/cpm/version`), pgweb, CPM catalog, observability, operator diagnosis, and user-support scenarios.
+- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) — Platform administration for **Compose and minikube**: environments, Helm/kubectl deploy, ingress edge, **Cloudflare Tunnel** (home / no inbound ports), deploy and health checks (`/api/version`, `/api/cpm/version`), pgweb, CPM catalogue (Crypto Policies + provider manifests), ADR §7.2.1 signals (catalogue and runtime), observability, operator diagnosis, and user-support scenarios.
 
 ### Architecture
 
-- [CPM — Discovery v1 to policy flow](./docs/architecture/cpm-v1-flow.md) — What Option A is (post-V1 real scan context via Discovery); scan → list/detail → explore → persist; **Capability Provider** solution profile in the flow; links to [CPM design workplan](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md) and maintainer contracts.
-- [CAFE MBSE / SysML Modelio project](./docs/architecture/cafe-mbse-sysml-modelio-project.md) — Step-by-step project plan to build a SysML/MBSE model of CAFE for Modelio, from system context and logical architecture to behavior flows, state machines, and traceability.
+- [CPM — Discovery v1 to policy flow](./docs/architecture/cpm-v1-flow.md) — What Option A is (post-V1 real scan context via Discovery); scan → catalogue CP → explore (couche A) → user constraints (couche B) → persist; **two-layer** Capability Provider model; links to [CPM design workplan](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md) and maintainer contracts.
+- [CAFE MBSE / SysML Modelio project](./docs/architecture/cafe-mbse-sysml-modelio-project.md) — Step-by-step project plan to build a SysML/MBSE model of CAFE for Modelio (**out of scope / not started** for the Capability Provider amendement train — see ADR PR plan). From system context and logical architecture to behavior flows, state machines, and traceability.
 - [CPM UI specifications (`cafe-frontend/CPM-specs-ui.md`)](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) — Normative CPM page user stories **US1–US21** and delivery epics **CPM-UI-1…8** (solution profile view, scénario A).
-- [ADR — Capability Provider abstraction (ADR_20260803)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) — ADR governing the Capability Provider model: `ProviderManifest`, `SolutionProfile`, posture matching, policy graph removal, Nicetry pilote v0.1.
-- [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service README covering the provider model, env vars, explore contract, persist payload v0.2.
+- [ADR — Capability Provider abstraction (ADR_20260803)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) — ADR governing the Capability Provider model: two-layer explore/persist, `ProviderManifest`, `SolutionProfile`, posture matching, Nicetry pilote.
+- [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service README covering the provider model, env vars (`CPM_CRYPTO_POLICY_PATHS`, `CPM_PROVIDER_MANIFEST_PATHS`), explore v0.2, persist `user_constraints`, catalogue/runtime signals.
 
 ### API QA
 
-- [API v1 QA Checklist](./docs/api/api-v1-qa-checklist.md) — Compact reviewer checklist for route names, removed paths, assessment ownership, delete semantics, and cross-repository follow-up.
+- [API v1 QA Checklist](./docs/api/api-v1-qa-checklist.md) — Compact reviewer checklist for route names, retired catalog paths, explore v0.2 / assessment ownership, delete semantics, and cross-repository follow-up.
 
 ### Security and Operations
 
-- [CPM Auth contract](./docs/security/cpm-contract.md) — Authenticated CPM behavior, scan authorization, owner-scoped persistence, error contract
-- [CPM explore — no deployable candidate (observability & admin diagnosis)](./docs/operations/cpm-explore-no-candidate-observability.md) — **REQ9** / **IMM-OPS-1…2**: structured logs, Prometheus/Grafana, `curl` admin workflow, `incompatible.chain_scope` diagnosis (complements user-facing **REQ8** in the SPA)
+- [CPM Auth contract](./docs/security/cpm-contract.md) — Authenticated CPM behavior, scan authorization, owner-scoped persistence, error contract (explore legacy **400**, `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`, assessment v0.2)
+- [CPM explore — no scan-compatible provider (observability & admin diagnosis)](./docs/operations/cpm-explore-no-candidate-observability.md) — **REQ9** / **IMM-OPS-1…2**: runtime signal `runtime.no_scan_compatible`, structured logs, Prometheus/Grafana, `curl` admin workflow (complements user-facing **REQ8** in the SPA; couche B is a separate signal)
 
 ## About CAFE
 

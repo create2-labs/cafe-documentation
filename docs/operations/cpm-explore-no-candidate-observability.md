@@ -1,10 +1,10 @@
-# CPM explore — no deployable candidate (observability & admin diagnosis)
+# CPM explore — no scan-compatible provider (observability & admin diagnosis)
 
-**REQ9** platform observability when CPM cannot select a deployable Crypto Policy during explore. Complements user-facing **REQ8** (explore rejection banner in the SPA).
+**REQ9** platform observability when CPM cannot select a **scan-compatible** Capability Provider during explore (couche A). Complements user-facing **REQ8** (explore rejection banner in the SPA).
 
 **Tracking:** [CPM `IMMUTABILITE_PR.md` — IMM-OPS-1…3](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/IMMUTABILITE_PR.md) · [Frontend `TODO.md` — REQ9](https://github.com/create2-labs/cafe-frontend/blob/main/TODO.md)
 
-**ADR Capability Providers (2026-08):** the rejection code set is extended with provider-level codes (`incompatible.provider.*`, `incompatible.posture`). The legacy `incompatible.chain_scope` code remains. See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) and [CPM README](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md).
+**ADR Capability Providers (amendement):** ADR §7.2.1 **family 2** runtime signal — empty `scan_compatible_providers` with non-empty `rejected_candidates`. Prefer **signaux / signals** (not “alarmes” as the unique term). Couche B failures at persist are a **separate** signal (`runtime.no_provider_after_user_constraints`). See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) and [CPM README](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md).
 
 ---
 
@@ -12,21 +12,26 @@
 
 `POST /api/cpm/v1/policies/decisions/explore` may return HTTP **200** with:
 
-- empty `decision.selected_policy_id` (and no ranked deployable candidate), and
+- empty `decision.scan_compatible_providers`, and
 - non-empty `decision.rejected_candidates`.
 
-This is **not** a transport or auth failure. Discovery supplied a usable wallet context, but the CPM compatibility engine found **no catalog instance** that satisfies the selection request — commonly `incompatible.chain_scope` when a requested chain is missing from `scope.chain_ids` (**all-or-nothing** on `selection_request.target_chain_ids`; see [WORKPLAN §5.1.1](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md#511-explore--périmètre-chaînes-target_chain_ids-tout-ou-rien)).
+This is **not** a transport or auth failure. Discovery supplied a usable wallet context and the client selected a catalogue Crypto Policy, but **couche A** found **no scan-compatible** provider (posture, wallet type, deployable chain + capabilities). Structured observability uses:
 
-Typical rejection codes (post-ADR Capability Providers):
+- `event=cpm.explore.no_deployable_candidate`
+- `adr_signal=runtime.no_scan_compatible`
+- counter `cpm_explore_no_deployable_candidate_total`
+
+**Not this signal:** persist **400** `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` (couche B KO after a scan-compatible snapshot) — that emits `cpm.persist.user_constraints_incompatible` + `adr_signal=runtime.no_provider_after_user_constraints`.
+
+Typical rejection codes (couche A / provider hard):
 
 | Code | Category | Trigger |
 | --- | --- | --- |
-| `incompatible.chain_scope` | Catalog gap | A requested chain is missing from `scope.chain_ids` (all-or-nothing on `target_chain_ids`) |
-| `incompatible.posture` | Posture mismatch | `required_posture` != `resulting_posture` from the provider SolutionProfile |
-| `incompatible.provider.chain` | Provider hard constraint | Provider does not support the requested chain |
-| `incompatible.provider.rotation` | Provider hard constraint | Provider key rotation model does not match `key_rotation_model` |
+| `incompatible.chain_scope` / `incompatible.provider.chain` | Chain support | Provider cannot deploy on the wallet’s chain set |
+| `incompatible.posture` | Posture mismatch | Crypto Policy `required_posture` != profile `resulting_posture` |
+| `incompatible.provider.rotation` | Capability | Profile needs rotation capability (e.g. `rotate_signer` for `per_userop`) that couche A cannot satisfy |
 | `incompatible.provider.wallet_type` | Provider hard constraint | Provider does not support the account type |
-| Other maturity / multichain | Product mismatch | `minimum_maturity`, `require_multichain`, `allow_new_wallet`, `address_continuity_required` |
+| `compatibility_status=erroneous` | Manifest | Contradictory `suggested_user_constraints` (not scan-compatible) |
 
 ---
 
@@ -35,11 +40,12 @@ Typical rejection codes (post-ADR Capability Providers):
 | Layer | Track | Repository | Role |
 | --- | --- | --- | --- |
 | End user | **REQ8** / **FE-IMM-13** | `cafe-frontend` | Banner explaining rejection in the CPM UI (`CpmExploreRejectionBanner`) |
-| Backend instrumentation | **IMM-OPS-1** | `cafe-crypto-policy-mgt` | Structured log + Prometheus counter on each qualifying explore |
+| Backend instrumentation | **IMM-OPS-1** / **CPM-P11b** | `cafe-crypto-policy-mgt` | Structured log + Prometheus counter on each qualifying explore |
 | Ops dashboard / alert | **IMM-OPS-2** | `cafe-deploy` | Grafana dashboard, Prometheus scrape, sustained-trend alert |
+| Catalogue startup (family 1) | **CPM-P11a** | `cafe-crypto-policy-mgt` | Posture orphanage WARN / malformed suggestions ERROR — **not** this runbook |
 | Future admin product view | **IMM-OPS-3** | TBD | Actionable coverage-gap synthesis (deferred) |
 
-**Privacy / cardinality:** investigable fields (`scan_id`, chain id lists, catalog instance ids, hashed wallet) belong in **structured logs** or a future admin UI — **never** as high-cardinality Prometheus labels.
+**Privacy / cardinality:** investigable fields (`scan_id`, chain id lists, catalogue ids, hashed wallet) belong in **structured logs** or a future admin UI — **never** as high-cardinality Prometheus labels.
 
 ---
 
@@ -47,9 +53,9 @@ Typical rejection codes (post-ADR Capability Providers):
 
 ### Hook
 
-After `PolicyDecisionEvaluator.Evaluate`, before `respondJSON(200)`, when `len(ranked)==0` and `len(rejected)>0`:
+After building the explore decision, before `respondJSON(200)`, when `len(scan_compatible_providers)==0` and `len(rejected_candidates)>0`:
 
-- **Log event:** `cpm.explore.no_deployable_candidate`
+- **Log event:** `cpm.explore.no_deployable_candidate` (+ `adr_signal=runtime.no_scan_compatible`)
 - **Counter:** `cpm_explore_no_deployable_candidate_total` (one increment per event)
 
 **Endpoint:** `GET /metrics` on `cafe-cpm` (public, same class as `/healthz`). Dedicated registry — counter lines appear only after at least one qualifying explore (empty `/metrics` body is normal on a fresh deploy).
@@ -61,17 +67,17 @@ After `PolicyDecisionEvaluator.Evaluate`, before `respondJSON(200)`, when `len(r
 | `rejection_code` | **Dominant** code for the event (priority: `incompatible.chain_scope`, else first stable blocking code, else `unknown`) |
 | `wallet_type` | Canonical value from `policy_context`, or `unknown` |
 | `binding` | `discovery` when `scan_id` / Discovery context is present; else `unknown` |
-| `missing_chain_count` | Bucket `0` / `1` / `2` / `3` / `4_plus` / `unknown` — for `incompatible.chain_scope`, minimum missing chains among rejected candidates |
+| `missing_chain_count` | Bucket `0` / `1` / `2` / `3` / `4_plus` / `unknown` — when chain-scope style rejections apply |
 
 ### Structured log fields (investigation)
 
 May include:
 
-- `scan_id`
-- `requested_chain_ids`, `observed_chain_ids`, `candidate_chain_ids`, `missing_chain_ids`
+- `scan_id`, `crypto_policy_id`
+- `requested_chain_ids`, `observed_chain_ids`, `missing_chain_ids`
 - `rejection_codes`, `dominant_rejection_code`
 - `rejected_candidates_count`
-- candidate `instance_id` / `template_id` when available
+- candidate / provider identifiers when available
 - `request_id` (from `X-Request-Id` when present)
 - `wallet_address_hash` — normalized address, SHA-256 truncated; **never** raw wallet address
 
@@ -105,7 +111,7 @@ Verify: Prometheus **Status → Targets** → `cafe-cpm-api` = UP.
 - **Title:** CAFE - CPM Explore Rejections
 - **File:** `cafe-deploy/volumes/grafana/dashboards/dashboard-cpm-explore-rejections.json`
 - **Variables:** `interval`, `job`, `rejection_code`
-- **Panels:** rate by `rejection_code`, focus `incompatible.chain_scope`, breakdown by `wallet_type` and `missing_chain_count` bucket
+- **Panels:** rate by `rejection_code`, focus chain-scope style codes, breakdown by `wallet_type` and `missing_chain_count` bucket
 
 Grafana reads Prometheus (`http://prometheus:9090`), not raw CPM `/metrics` on the host.
 
@@ -113,7 +119,7 @@ Grafana reads Prometheus (`http://prometheus:9090`), not raw CPM `/metrics` on t
 
 - **Name:** `CpmExploreIncompatibleChainScopeSustained`
 - **Severity:** warning
-- **Intent:** sustained elevation of `incompatible.chain_scope` (15m rate > 3× 6h baseline), not a single event
+- **Intent:** sustained elevation of chain-scope style rejections (15m rate > 3× 6h baseline), not a single event
 
 ### Smoke
 
@@ -141,6 +147,7 @@ export CPM_BASE='http://localhost:8082'         # or https://<host> at edge
 export EMAIL='user@example.com'
 export PASSWORD='…'
 export SCAN_ID='1400d642-f0cf-4e01-ab2c-3202e0959679'   # known wallet scan
+export CRYPTO_POLICY_ID='cpm_pq_account_validation_v1'
 ```
 
 ### 1. Session JWT
@@ -171,9 +178,9 @@ echo "$DETAIL" | jq '{
 }'
 ```
 
-### 3. Explore — full rejection detail (primary API diagnostic)
+### 3. Explore v0.2 — full rejection detail (primary API diagnostic)
 
-Build `policy_context` and `selection_request` from detail (same as integrated smoke):
+Build `policy_context` from detail; send `crypto_policy_id` (no `selection_request`):
 
 ```bash
 curl -fsS -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
@@ -182,27 +189,21 @@ curl -fsS -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
   -H 'X-Request-Id: admin-diagnose-1' \
   -d "$(jq -nc \
     --arg scan_id "$SCAN_ID" \
+    --arg cp "$CRYPTO_POLICY_ID" \
     --argjson pc "$(jq -c '{
+      scan_id: .scan_id,
       wallet_address: .result.wallet_address,
       wallet_type: .result.wallet_type,
       chain_ids: .result.chain_ids,
       current_algorithm: (.result.current_algorithm // "secp256k1_ecrecover"),
       current_pq_posture: .result.current_pq_posture,
-      scanned_at: .result.scanned_at
+      scanned_at: .result.scanned_at,
+      status: .status
     }' <<<"$DETAIL")" \
-    --argjson chains "$(jq -c '.result.chain_ids' <<<"$DETAIL")" \
     '{
       scan_id: $scan_id,
-      policy_context: $pc,
-      selection_request: {
-        target_posture: "hybrid",
-        target_chain_ids: $chains,
-        require_multichain: (($chains | length) > 1),
-        allow_new_wallet: false,
-        address_continuity_required: true,
-        minimum_maturity: 1,
-        approval_mode: "manual"
-      }
+      crypto_policy_id: $cp,
+      policy_context: $pc
     }')" | jq .
 ```
 
@@ -211,38 +212,35 @@ curl -fsS -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
 ```bash
 # re-run explore and pipe to:
 jq '{
-  selected: .decision.selected_policy_id,
-  targets: .decision.request_summary.target_chain_ids,
+  scan_compatible: [.decision.scan_compatible_providers[]? | .candidate_id],
+  crypto_policy_id: $CRYPTO_POLICY_ID,
   observed: .decision.observed_wallet_summary.chain_ids,
   rejections: [.decision.rejected_candidates[]? | {
-    instance: .crypto_policy_instance_id,
-    template: .template_id,
+    crypto_policy_id: .crypto_policy_id,
+    provider: .solution_profile_ref.provider_id,
     codes: [.rejection_reasons[]?.code],
     messages: [.rejection_reasons[]?.message]
   }]
-}'
+}' --arg CRYPTO_POLICY_ID "$CRYPTO_POLICY_ID"
 ```
 
-Example rejection:
+HTTP **200** with empty `scan_compatible_providers` is expected for this outcome — do not treat it as a client error. Legacy explore bodies with `selection_request` return **400**.
 
-```json
-{
-  "code": "incompatible.chain_scope",
-  "message": "target_chain_id 56 not covered by instance scope"
-}
-```
-
-HTTP **200** with empty `selected` is expected for this outcome — do not treat it as a client error.
-
-### 4. Catalog — compare `scope.chain_ids` vs requested chains
+### 4. Catalogue — Crypto Policies + providers
 
 ```bash
-curl -fsS "${CPM_BASE}/api/cpm/v1/policies/instances" \
+curl -fsS "${CPM_BASE}/api/cpm/v1/crypto-policies" \
   -H "Authorization: Bearer ${TOKEN}" \
-  | jq '[.items[] | {id, template_id, scope: .scope.chain_ids}]'
+  | jq '[.items[] | {id, required_posture, allowed_providers}]'
+
+curl -fsS "${CPM_BASE}/api/cpm/v1/providers" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  | jq .
 ```
 
-Diagnosis pattern: for each `target_chain_id` in the explore request, it must appear in the candidate instance `scope.chain_ids`. If the wallet requests `[1, 56, 8453, 42161]` but `cpx_hybrid_prod` has `scope.chain_ids: [1, 8453]`, chains **56** and **42161** are missing → `incompatible.chain_scope`.
+Diagnosis pattern: confirm the CP’s `allowed_providers` and each provider’s chain / posture / capabilities against the wallet `chain_ids` and type from Discovery detail.
+
+Retired (do not use): `GET /policies/instances`, `/policies/templates`, `/policies/catalog`.
 
 ### 5. Metrics (complement to Grafana)
 
@@ -269,7 +267,7 @@ CPM_BASE='http://localhost:8082' \
 ./scripts/test-discovery-v1-wallet-scans-to-cpm.sh
 ```
 
-`SKIP_PERSIST=1` stops after explore (exit `1` when no candidate is **expected** for out-of-scope chains).
+`SKIP_PERSIST=1` stops after explore (exit `1` when no scan-compatible provider is **expected** for uncovered chains).
 
 ---
 
@@ -277,19 +275,20 @@ CPM_BASE='http://localhost:8082' \
 
 | Step | Question | Source |
 | --- | --- | --- |
-| 1 | Is explore HTTP 200 with rejections? | §3 explore JSON |
+| 1 | Is explore HTTP 200 with empty `scan_compatible_providers`? | §3 explore JSON |
 | 2 | Dominant code? | `rejection_reasons[].code` or log `dominant_rejection_code` |
-| 3 | Which chains are requested vs in catalog scope? | §3 `target_chain_ids` + §4 `scope.chain_ids` |
-| 4 | Which chains are missing? | Log `missing_chain_ids` or diff targets vs scope |
+| 3 | Which CP / providers are in catalogue? | §4 `/crypto-policies` + `/providers` |
+| 4 | Which chains / posture / wallet type mismatch? | Detail vs provider capabilities |
 | 5 | Is this a trend or one-off? | Grafana / Prometheus §5 |
 | 6 | Correlation id for support? | `X-Request-Id` → CPM logs |
+| 7 | Is this actually couche B at persist? | Separate signal — not this counter |
 
 ---
 
 ## Related documents
 
-- [04-cafe-admin-guide.md](../../04-cafe-admin-guide.md) — CPM catalog administration and operator workflows
-- [Functional specifications — Explore (preview)](../../functional-specifications.md#explore-preview)
+- [04-cafe-admin-guide.md](../../04-cafe-admin-guide.md) — CPM catalogue administration and operator workflows
+- [Functional specifications — Explore (preview)](../../functional-specifications.md#explore-preview--couche-a)
 - [Developer guide — Option A explore](../../03-cafe-developer-guide.md#option-a-explore-with-discovery-v1-policy_context)
 - [CPM v1 flow](../architecture/cpm-v1-flow.md)
 - [CPM README — IMM-OPS-1](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md#explore-no-deployable-candidate-observability-imm-ops-1)

@@ -33,10 +33,10 @@
          3. [Delete](#delete-1)
          4. [CPM exclusion](#cpm-exclusion)
       4. [Cryptographic policies (CPM)](#cryptographic-policies-cpm)
-         1. [Read catalog](#read-catalog)
-         2. [Explore (preview)](#explore-preview)
-         3. [Persist](#persist)
-         4. [Read instances](#read-instances)
+         1. [Read catalogue](#read-catalogue)
+         2. [Explore (preview) — couche A](#explore-preview--couche-a)
+         3. [Persist (EOA -- CP-PERSIST V1) — rejeu A+B](#persist-eoa----cp-persist-v1--rejeu-ab)
+         4. [Read policies](#read-policies)
          5. [Delete](#delete-2)
          6. [Assessment (async)](#assessment-async)
       5. [Policy drafts (CPM)](#policy-drafts-cpm)
@@ -44,7 +44,7 @@
          2. [Delete](#delete-3)
       6. [Remediation (product direction)](#remediation-product-direction)
       7. [Governance — scan immutability and CPM coupling](#governance--scan-immutability-and-cpm-coupling)
-      8. [Platform observability — CPM explore (REQ9)](#platform-observability--cpm-explore-no-deployable-candidate-req9)
+      8. [Platform observability — CPM explore (REQ9)](#platform-observability--cpm-explore-no-scan-compatible-provider-req9)
       9. [Platform Status — deployed service versions (US18)](#platform-status--deployed-service-versions-us18)
       10. [CPM user interface — graph workspace (US1–US21)](#cpm-user-interface--graph-workspace-us1us21)
    6. [Data structures](#data-structures)
@@ -274,32 +274,35 @@ States: `requested` → `started` → `completed` | `failed` (or `requested` →
 
 ### Cryptographic policies (CPM)
 
-#### Read catalog
+#### Read catalogue
 
-- **`GET /api/cpm/v1/policies/catalog`**, **`/templates`**, **`/instances`** — authenticated.
-- Static catalog files are loaded at CPM startup; administration (add template, widen chain scope) is documented in [04-cafe-admin-guide.md](./04-cafe-admin-guide.md#cpm-catalog-administration).
+- **`GET /api/cpm/v1/crypto-policies`**, **`GET /api/cpm/v1/crypto-policies/{crypto_policy_id}`** — authenticated; Crypto Policy intention (`required_posture` + `allowed_providers`).
+- **`GET /api/cpm/v1/providers`**, **`GET /api/cpm/v1/providers/{provider_id}`** — authenticated; Capability Provider manifests.
+- Static files are loaded at CPM startup via `CPM_CRYPTO_POLICY_PATHS` and `CPM_PROVIDER_MANIFEST_PATHS`; administration is documented in [04-cafe-admin-guide.md](./04-cafe-admin-guide.md#cpm-catalogue-administration).
+- **Retired (not live):** `/policies/templates`, `/policies/instances`, `/policies/catalog`.
 
-#### Explore (preview)
+#### Explore (preview) — couche A
 
-- **`POST /api/cpm/v1/policies/decisions/explore`** with `scan_id`, **`policy_context`**, `selection_request`.
+- **`POST /api/cpm/v1/policies/decisions/explore`** with optional `scan_id`, **`crypto_policy_id`**, **`policy_context`**.
 - Guards: **W7** (newest row must be `completed`), **W2** (`scan_id` must match latest completed for target), wallet-only (**TLS -> 404**).
-- **`selection_request` key fields (v0.1):** `target_posture` (stable wire alias for required posture); `key_rotation_model: "none" | "per_userop"` (replaces removed `key_rotation_required` bool); standard chain/multichain/continuity/maturity fields.
-- **Capability Provider ranking (ADR 2026-08):** CPM ranks instances by matching `required_posture` against the provider SolutionProfile `resulting_posture`. Hard compat codes: `incompatible.posture`, `incompatible.provider.chain`, `incompatible.provider.rotation`, `incompatible.provider.wallet_type`. Response carries `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, and soft findings (`requires_bundler`, `requires_local_signer_state`). No `graphEdges` / `nodeInstances` / `node_path` in response.
+- **Wire v0.2:** no `selection_request`; no couche B fields (`allow_new_wallet`, `address_continuity_required`, `key_rotation_model`, `target_posture`). Legacy explore → HTTP **400**.
+- **Couche A (ADR amendement):** CPM returns **`scan_compatible_providers`** by matching catalogue CP posture + `allowed_providers` against provider SolutionProfiles (deployable chain + capabilities, including `rotate_signer` when profile is `per_userop`). Hard codes: `incompatible.posture`, `incompatible.provider.chain`, `incompatible.provider.rotation`, `incompatible.provider.wallet_type`. Response carries `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, soft findings, and indicative **`suggested_user_constraints`**. No `graphEdges` / `nodeInstances` / `node_path`.
+- **Vocabulary:** **scan-compatible** (couche A), **user-qualified** (couche B UI indicative), **persistable** (CPM rejeu A+B). Avoid `ranked_candidates` as normative vocabulary.
 - **`claim_status: "declared"`** means the provider declared this capability -- it is **not** an audited or executed proof.
-- **Chain scope (all-or-nothing):** every id in `selection_request.target_chain_ids` must appear in a candidate instance `scope.chain_ids` for that candidate to be deployable. Partial coverage is rejected (e.g. `incompatible.chain_scope` when chain `56` is observed and requested but absent from catalog scope).
-- **No deployable candidate (HTTP 200):** when no ranked candidate remains and `rejected_candidates` is non-empty, the response is still **success** -- not an error. The SPA explains why (**REQ8** / **FE-IMM-13**). Platform ops consume **REQ9** observability ([operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md)): structured log `cpm.explore.no_deployable_candidate`, counter `cpm_explore_no_deployable_candidate_total`, Grafana dashboard **IMM-OPS-2**.
+- **No scan-compatible provider (HTTP 200):** when `scan_compatible_providers` is empty and `rejected_candidates` is non-empty, the response is still **success**. The SPA explains why (**REQ8**). Platform ops consume **REQ9** / ADR §7.2.1 family-2 signal ([operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md)): `cpm.explore.no_deployable_candidate` + `adr_signal=runtime.no_scan_compatible`, counter `cpm_explore_no_deployable_candidate_total`.
 
-#### Persist (EOA -- CP-PERSIST V1)
+#### Persist (EOA -- CP-PERSIST V1) — rejeu A+B
 
 - **Normative EOA path:** `POST /api/cpm/v1/wallet-challenges` (mandatory stateless canonical message) -> EIP-191 / `personal_sign` -> **`POST /api/cpm/v1/drafts/{draft_id}/persist`** with `signed_message` + `signature`.
 - **Wallet proof required** for persist. Scan, explore, and platform draft save do **not** require proof (non-regression S1-S3).
-- **Persist payload v0.2 (ADR 2026-08):** payload must use `schema_version: "cafe.crypto_policy.v0.2"` with `accepted_provider_snapshot` (includes `solution_profile_ref`, pinned refs, and `accepted_soft_findings`). Refs must not be `unpinned_pending_fixture`.
+- **Persist payload v0.2:** `schema_version: "cafe.crypto_policy.v0.2"` with **`crypto_policy_id`** (not `template_id`), **`user_constraints`**, `required_posture`, `solution_profile_ref`, `accepted_provider_snapshot` (pinned refs + accepted soft findings). Nicetry refs are pinned (**CPM-P7** done).
+- CPM **rejoue couche A then B**; couche B failure → **400** `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` (runtime signal `adr_signal=runtime.no_provider_after_user_constraints`).
 - Same immutability guards as explore (**W7**, **W2**, wallet-only, TLS -> **404**).
 - Legacy **`POST /api/cpm/v1/policies`** is **not** the normative EOA persist endpoint; Discovery-bound EOA payloads without signed authorization return **403** `WALLET_CONTROL_PROOF_REQUIRED`.
 - V1 persist is **EOA-only**; non-EOA drafts return **422** `UNSUPPORTED_WALLET_TYPE` on persist routes.
 - Details: [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md).
 
-#### Read instances
+#### Read policies
 
 - **`GET /api/cpm/v1/policies`** — list owner policies; filter by `scan_id` query param.
 
@@ -309,7 +312,7 @@ States: `requested` → `started` → `completed` | `failed` (or `requested` →
 
 #### Assessment (async)
 
-- **`POST /api/cpm/v1/policies/assessment/request`** — wallet scans only; server loads Discovery detail; client must not send `policy_context`.
+- **`POST /api/cpm/v1/policies/assessment/request`** — wallet scans only; body **`scan_id` + `crypto_policy_id`** only; server loads Discovery detail; client must not send `policy_context` or `selection_request` (HTTP → **400**; NATS → validation error).
 
 ### Policy drafts (CPM)
 
@@ -347,33 +350,33 @@ Rules **W1–W8** apply to **wallet** targets with CPM `binding=discovery`:
 
 **Client UX (draft + rescan, tranché 2026-06):** rescan is allowed with a **platform draft** on the address. The draft may stay on an older `scan_id` until the user clicks **Rebind to last scan for this address** (upsert `POST /api/cpm/v1/drafts` onto **W2**). **Explore**, **validate**, and **persist** stay blocked while the draft is orphaned. **`wallet_type`** must match on rebind or the UI refuses. **No** local export / `localStorage` / client reload. **Persisted policy** still blocks rescan. See [cafe-frontend IMMUTABILITE.md](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md).
 
-### Platform observability — CPM explore no deployable candidate (REQ9)
+### Platform observability — CPM explore no scan-compatible provider (REQ9)
 
-When explore returns HTTP **200** with no deployable Crypto Policy (`selected_policy_id` empty, `rejected_candidates` non-empty), the product must give **operators** exploitable visibility without exposing wallet identities in metrics or real-time end-user alerts.
+When explore returns HTTP **200** with no scan-compatible provider (`scan_compatible_providers` empty, `rejected_candidates` non-empty), the product must give **operators** exploitable visibility without exposing wallet identities in metrics or real-time end-user alerts.
 
 #### Product intent
 
-Discovery has produced a **usable wallet scan context**, but CPM cannot propose a catalog route that satisfies the selection request. Typical reasons:
+Discovery has produced a **usable wallet scan context**, and the user selected a catalogue Crypto Policy, but CPM couche A cannot propose a **scan-compatible** provider. Typical reasons:
 
-- **Catalog gap** — a discovered chain (e.g. `56`) has no CP instance whose `scope.chain_ids` covers it.
-- **Scope mismatch** — instance scope is narrower than the wallet’s multi-chain set (**all-or-nothing** on `target_chain_ids`).
-- **Other blocking codes** — posture, maturity, multichain flags (less common in early deployments).
+- **Catalogue / provider gap** — no allowed provider supports the wallet’s chain set or posture.
+- **Hard provider constraints** — wallet type, rotation capability, continuity flags at couche A.
+- **Other blocking codes** — erroneous suggested constraints, maturity (less common in early deployments).
 
-This signal helps product and ops detect coverage gaps, misconfigured catalogs, or frequent user paths that need new CP templates. It is **not** a failed API call and does **not** warrant per-wallet email or Slack from the platform core.
+This **runtime signal** (ADR §7.2.1 family 2: `adr_signal=runtime.no_scan_compatible`) helps product and ops detect coverage gaps or misconfigured catalogues. It is **not** a failed API call and does **not** warrant per-wallet email or Slack from the platform core. Couche B failures at persist are a **separate** signal (`runtime.no_provider_after_user_constraints`).
 
 #### Separation of concerns (REQ8 vs REQ9)
 
 | Audience | Requirement | Delivery |
 | --- | --- | --- |
-| **End user** | Understand why no policy applies during explore | **REQ8** — SPA banner (`CpmExploreRejectionBanner`, **FE-IMM-13**): observed vs requested chains, dominant `rejection_reasons[].code` (e.g. `incompatible.chain_scope`) |
+| **End user** | Understand why no provider is scan-compatible | **REQ8** — SPA banner (`CpmExploreRejectionBanner`, **FE-IMM-13**): dominant `rejection_reasons[].code` |
 | **Platform / SRE** | Trend, alert, and investigate incidents | **REQ9** — **IMM-OPS-1** (CPM log + Prometheus counter), **IMM-OPS-2** (Grafana dashboard + sustained alert on `cafe-deploy`) |
 | **Future admin** | Actionable coverage-gap synthesis | **IMM-OPS-3** — deferred; not in current release scope |
 
 #### Operator expectations
 
 - **Grafana** dashboard **CAFE - CPM Explore Rejections** shows rates and breakdowns by `rejection_code`, `wallet_type`, `missing_chain_count` bucket — not individual wallets.
-- **Alert** `CpmExploreIncompatibleChainScopeSustained` fires on **sustained** elevation of `incompatible.chain_scope`, not a single explore event.
-- **Investigation** uses API explore JSON, `GET /policies/instances` (scope vs targets), CPM structured logs (`cpm.explore.no_deployable_candidate`), and optional Prometheus queries — documented in the [operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md).
+- **Alert** `CpmExploreIncompatibleChainScopeSustained` fires on **sustained** elevation of chain-scope style rejections, not a single explore event.
+- **Investigation** uses API explore JSON, `GET /crypto-policies` + `GET /providers`, CPM structured logs (`cpm.explore.no_deployable_candidate`), and optional Prometheus queries — documented in the [operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md).
 
 #### Privacy and data handling
 
@@ -544,9 +547,10 @@ Wire event: `cafe.discovery.wallet.observed` v0.1 — see [03-cafe-developer-gui
 
 1. List scans: `GET …/wallets/scans?address=…` (or select scan in CPM UI — **US2**, **US12**).
 2. Load detail for selected `scan_id`.
-3. Explore: `POST …/policies/decisions/explore` with `scan_id`, `policy_context`, `selection_request`.
-4. Save platform draft: `POST …/drafts` (optional resume via `GET …/drafts?id=…`).
-5. Persist (EOA, CP-PERSIST V1): `POST …/wallet-challenges` → EIP-191 sign → `POST …/drafts/{draft_id}/persist` with `signed_message` + `signature` — not legacy `POST …/policies` without proof.
+3. Select Crypto Policy from catalogue: `GET …/crypto-policies`.
+4. Explore: `POST …/policies/decisions/explore` with `scan_id`, `crypto_policy_id`, `policy_context`.
+5. Validate user constraints in UI (couche B indicative); save platform draft: `POST …/drafts` with `user_constraints`.
+6. Persist (EOA, CP-PERSIST V1): `POST …/wallet-challenges` → EIP-191 sign → `POST …/drafts/{draft_id}/persist` with `signed_message` + `signature` — not legacy `POST …/policies` without proof.
 
 See [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md) and CPM UI persist flow (**US8**, **US21**).
 

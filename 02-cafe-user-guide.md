@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.7.0
+  - Date: August 22nd, 2026
+  - Comments: Rewrite **Crypto Policy Management** for the two-layer model (ADR amendement): select Crypto Policy from catalogue → explore **scan-compatible** providers → validate **user constraints** explicitly → persist with `user_constraints`. No FE hard-coded Nicetry defaults; `key_rotation` lives in the constraints panel (not on explore re-request). See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
 - v0.6.0
   - Date: August 18th, 2026
   - Comments: Update **Crypto Policy Management** section for Capability Provider model (ADR 2026-08): solution profile view replaces policy graph; `key_rotation_model` selector; `claim_status: declared` wording; soft findings acceptance before persist; `accepted_provider_snapshot` in persist payload. See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
@@ -321,7 +324,20 @@ Click on any scan result to view:
 
 ## Crypto Policy Management
 
-The **Crypto Policy Management** page (`/crypto-policy-management`) lets you define a **recommended Crypto Policy (CP)** for an **EOA wallet scan**. The page shows a **solution profile view**: you select a scan, browse compatible **Capability Provider** candidates in a list, and inspect the chosen provider through a structured **solution profile card** (Input / Account / Signature / Posture blocks).
+The **Crypto Policy Management** page (`/crypto-policy-management`) lets you define a **recommended Crypto Policy (CP)** for an **EOA wallet scan**. The page follows a **two-layer** flow:
+
+1. **Couche A (scan-compatible)** — CAFE matches your scan against a catalogue Crypto Policy and Capability Provider manifests. CPM is authoritative.
+2. **Couche B (user constraints)** — you review and **explicitly validate** constraints (allow new wallet, address continuity, key rotation). The UI filter is indicative; CPM re-checks at persist.
+
+Vocabulary:
+
+| Term | Meaning |
+| --- | --- |
+| **Scan-compatible** | Provider passed couche A (scan × Crypto Policy × solution profile) |
+| **User-qualified** | Scan-compatible **and** matching your validated constraints in the UI (indicative only) |
+| **Persistable** | CPM rejeu of couche A+B plus all persist gates succeeded |
+
+The page shows a **solution profile view**: select a scan and a Crypto Policy, browse **scan-compatible** providers, inspect the chosen provider through a structured **solution profile card** (Input / Account / Signature / Posture blocks), then validate constraints before persist.
 
 **Prerequisites:**
 
@@ -335,9 +351,11 @@ The **Crypto Policy Management** page (`/crypto-policy-management`) lets you def
 
 If you have no eligible EOA scan, the page shows an **empty state** with a link to **Discovery → Wallet scan**. Run a wallet scan first, then return to CPM.
 
-#### Selecting a wallet scan
+#### Selecting a wallet scan and Crypto Policy
 
-On first visit, you pick a scan from the **scan picker** (no scan is pre-selected). After you select a scan, the page loads CPM explore results and shows a list of **compatible candidates** (or a rejection banner if none apply).
+On first visit, you pick a scan from the **scan picker** (no scan is pre-selected). Then select a **Crypto Policy** from the catalogue (for example PQ account validation). There is **no** automatic default selection from Nicetry or the frontend.
+
+After you select a scan and a Crypto Policy, the page runs explore and shows **scan-compatible** providers (or a rejection banner if none apply).
 
 **Change scan:** use the scan picker to switch. If you have **unsaved draft edits** not yet saved to the server, you are asked to confirm before switching.
 
@@ -347,21 +365,33 @@ On **Discovery → Wallet scan**, each eligible row may show **Open CPM** (label
 
 When you leave CPM and return **in the same browser tab** without a deep link, the page restores your **last active scan** and state when possible.
 
-### Choosing a Capability Provider
+### Choosing a scan-compatible provider
 
-1. Browse the **candidate list** — compatible candidates are selectable; rejected ones are shown with a reason.
+1. Browse the **candidate list** — scan-compatible providers are selectable; rejected ones are shown with a reason.
 2. Select a candidate to open its **solution profile card**, which shows:
-   - **Input** — wallet type, key rotation model, chain scope
+   - **Input** — wallet type, chain scope, and profile capabilities
    - **Account** — account abstraction kind (e.g. ERC-4337)
    - **Signature** — signature scheme and family
    - **Posture** — `required_posture` to `resulting_posture` bandeau
    - **Provider maturity** and **claim status** (see below)
 
-3. Optionally adjust the **key rotation model** (`none` / `per_userop`) in the selection request; re-explore is triggered automatically.
-
 You can **change the draft candidate** anytime. If your draft already contains meaningful work, you must confirm before replacing it. Changing the draft **never** modifies a **persisted (recommended)** policy.
 
 When a **persisted CP** already exists, selecting a new candidate creates a **replacement draft** while the current recommendation stays visible as read-only.
+
+### Validating your constraints (couche B)
+
+After explore, the **user constraints** panel is pre-checked from the provider’s **suggested** constraints (`suggested_user_constraints` from the manifest — indicative, not FE hard-coded defaults):
+
+| Constraint | Meaning |
+| --- | --- |
+| Allow new wallet | Whether creating a new wallet/account is acceptable |
+| Address continuity required | Whether the EOA address must stay continuous |
+| Key rotation model | `none` or `per_userop` |
+
+These live in the **constraints panel**, not on a second explore request. Changing key rotation does **not** re-call explore.
+
+Click **Validate my constraints** to apply the local couche B filter. Providers that still match become **user-qualified** in the UI. That label is **indicative** — CPM may still reject at persist if couche B fails on the server.
 
 ### Understanding `claim_status: declared`
 
@@ -378,7 +408,7 @@ Do not rely on `declared` alone as evidence of post-quantum security. CAFE prese
 
 ### Soft findings -- accept before persist
 
-Some candidates carry **soft findings** that are not blocking for selection but must be acknowledged before you can persist the policy:
+Some scan-compatible candidates carry **soft findings** that are not blocking for couche A but must be acknowledged before you can persist the policy:
 
 | Finding | Meaning |
 | --- | --- |
@@ -389,15 +419,17 @@ A checklist of soft findings is presented before the wallet signature step. You 
 
 ### Saving and persisting
 
-**Save draft** stores your candidate selection on the platform (recoverable on return). It does **not** make the policy recommended.
+**Save draft** stores your candidate selection and validated constraints on the platform (recoverable on return). It does **not** make the policy recommended.
 
-**Persist** makes your draft the **recommended** policy for the scan. There is **one Persist button** -- no separate Validate step:
+**Persist** makes your draft the **recommended** policy for the scan. Persist sends your validated **`user_constraints`** with the Crypto Policy payload; CPM rejoue couche A+B:
 
 1. Click **Persist** (or **Replace persisted policy** when replacing).
-2. The app runs a **local structural check** on the draft. If issues are found, they are listed and **no wallet signature** is requested.
+2. The app runs a **local structural check** on the draft (including that constraints were validated). If issues are found, they are listed and **no wallet signature** is requested.
 3. If soft findings are present, you must **accept each one** in the checklist before proceeding.
 4. If the check passes and soft findings are accepted, you sign with your **EOA wallet** (MetaMask or injected provider) to authorize persistence.
 5. For **replacement**, you also confirm which policy replaces which before signing.
+
+If CPM rejects your constraints at persist, you see an incompatibility error — adjust constraints or choose another scan-compatible provider and try again.
 
 Deleting a **draft** or **persisted CP** always requires **confirmation**. Deleting a persisted CP does **not** require a wallet signature. Deleting a draft does not remove a persisted recommendation, and vice versa.
 
@@ -405,9 +437,9 @@ Deleting a **draft** or **persisted CP** always requires **confirmation**. Delet
 
 If you edited a draft but have **not** saved it to the server, navigating away from CPM (another page, sign-out, or closing the tab) shows a warning with options to **Stay**, **Leave without saving**, or **Save draft** (when allowed). Saved server drafts do not trigger this warning -- you can resume them later.
 
-### Explore without a deployable policy
+### Explore without a scan-compatible provider
 
-If no candidate fits your scan (for example chain scope mismatch, posture incompatibility, or hard provider constraint), CPM shows an **explanation banner** with rejection reasons and codes (e.g. `incompatible.provider.chain`, `incompatible.posture`). This is not a broken scan -- it means the catalog does not yet cover your wallet's configuration. Platform operators monitor these cases separately.
+If no provider is scan-compatible for your scan and Crypto Policy (for example chain support mismatch, posture incompatibility, or hard provider constraint), CPM shows an **explanation banner** with rejection reasons and codes (e.g. `incompatible.provider.chain`, `incompatible.posture`). This is not a broken scan -- it means the catalogue does not yet cover your wallet's configuration. Platform operators monitor these cases as a **runtime signal** separately from constraint mismatches at persist.
 
 ### Related documentation
 
