@@ -278,7 +278,7 @@ CafeSystem
 - [ ] Modeliser wallet scan
 - [ ] Modeliser TLS scan
 - [ ] Modeliser Discovery scan -> CPM explore
-- [ ] Modeliser platform draft -> wallet challenge -> persist
+- [ ] Modeliser local composition (NB2) -> wallet challenge -> signed POST /policies (no platform draft)
 - [ ] Modeliser delete scan / ownership checks
 
 **Flows MVP :**

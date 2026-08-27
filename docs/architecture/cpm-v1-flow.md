@@ -1,4 +1,3 @@
-
 # CPM — Discovery v1 scan to policy flow
 
 **What is Option A?** Option A is the **post-V1 CPM integration path**: after the CPM frontend V1 policy workflow shipped, the product connects that page to **real user-owned wallet scans** via the **authenticated Discovery backend** (scan data is persisted behind Discovery today; Persistence Service remains the long-term owner). The UI selects a **`scan_id`**, loads v1 scan detail, and drives CPM explore/persist—**not** mock placeholders or direct DB access. A future **Option B** would expose scan context through an extracted Persistence Service API; Option A is the short-term path that respects current AuthN/AuthZ in Discovery. Full product intent, constraints, and data-flow rationale: [CPM `workplans/CPM_post_v_1_option_a_scan_context.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md).
@@ -7,45 +6,44 @@ Public architecture summary for integrators and technical writers. Normative HTT
 
 **ADR Capability Providers (amendement 2026-08):** two-layer model — **couche A** (explore → `scan_compatible_providers`) and **couche B** (persist `user_constraints`; UI filter indicative). Catalogue Crypto Policies expose `required_posture` + `allowed_providers` via `/crypto-policies`. No business policy graph; the UI derives its view from `solution_profile` fields. See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) and [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md).
 
-**CP-PERSIST V1 (EOA persist):** scan, explore, and platform draft save require **no** wallet proof. Normative EOA persist is `wallet-challenges` → EIP-191 sign → `POST /api/cpm/v1/drafts/{draft_id}/persist`. See [CP-PERSIST V1 runbook](../security/cp-persist-v1.md).
+**Remove CP drafts (ADR_20260824):** composition is **client-only** (NB2 `sessionStorage`). Normative EOA persist is `wallet-challenges` → EIP-191 sign → **`POST /api/cpm/v1/policies`** (signed body + `payload_sha256`). No `/drafts*`. Explore / challenge / persist are **W2**-gated. See [CP-PERSIST runbook](../security/cp-persist-v1.md) and [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md).
 
-## End-to-end path 
+## End-to-end path
 
 1. **Wallet scan** is queued and stored (Discovery DB today; Persistence Service is the long-term scan-data owner). **No wallet proof required.**
-2. **List + detail** — authenticated `GET /api/discovery/v1/wallets/scans` and `GET /api/discovery/v1/wallets/scans/{scan_id}`.
+2. **List + detail** — authenticated `GET /api/discovery/v1/wallets/scans` and `GET /api/discovery/v1/wallets/scans/{scan_id}`. Prefer **W2**: `?address=…&latest=true` (latest **completed** for owner+address).
 3. **Catalogue Crypto Policy** — UI loads `GET /api/cpm/v1/crypto-policies` and the user selects a `crypto_policy_id` (no `default_selection`).
-4. **CPM UI** — `cafe-frontend` solution profile view (**scénario A**): scan + CP selection, **scan-compatible** list, constraints panel seeded from `suggested_user_constraints`, **Validate my constraints**, **fiche** structured by provider fields. Spec: [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) · maintainer: [`docs/cpm-developer.md`](https://github.com/create2-labs/cafe-frontend/blob/main/docs/cpm-developer.md).
-5. **Explore (couche A)** — `POST /api/cpm/v1/policies/decisions/explore` with optional `scan_id`, **`crypto_policy_id`**, **`policy_context`**. Returns `scan_compatible_providers` with `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, soft findings, and indicative `suggested_user_constraints`. **No** `selection_request` / couche B fields. **No wallet proof required.**
-6. **Platform draft** — `POST /api/cpm/v1/drafts` (owner-scoped); payload includes `crypto_policy_id`, `user_constraints`, `solution_profile_ref`. **No wallet proof required.**
-7. **Persist (EOA, CP-PERSIST V1)** — `POST /api/cpm/v1/wallet-challenges` → EIP-191 / `personal_sign` → `POST /api/cpm/v1/drafts/{draft_id}/persist` with `signed_message` + `signature` + `cafe.crypto_policy.v0.2` (`user_constraints` + `accepted_provider_snapshot`). CPM **rejoue A+B**. **Wallet proof required.** Nicetry refs are pinned (**CPM-P7** done).
+4. **CPM UI** — `cafe-frontend` solution profile view (**scénario A**): scan + CP selection, **scan-compatible** list, constraints panel seeded from `suggested_user_constraints`, validate constraints, soft findings. Spec: [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) · maintainer: [`docs/cpm-developer.md`](https://github.com/create2-labs/cafe-frontend/blob/main/docs/cpm-developer.md).
+5. **Explore (couche A)** — `POST /api/cpm/v1/policies/decisions/explore` with optional `scan_id`, **`crypto_policy_id`**, **`policy_context`**. Returns `scan_compatible_providers` with `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, soft findings, and indicative `suggested_user_constraints`. **No** `selection_request` / couche B fields. **No wallet proof.** **W2 required** when scan-bound (`SCAN_NOT_LATEST` / `DISCOVERY_UNAVAILABLE`).
+6. **Local composition (NB2)** — editor state in page memory / `sessionStorage` by `scan_id`. **No** `POST /drafts`. **No wallet proof.**
+7. **Persist (EOA)** — `POST /api/cpm/v1/wallet-challenges` → EIP-191 / `personal_sign` → **`POST /api/cpm/v1/policies`** with `signed_message` + `signature` + `cafe.crypto_policy.v0.2` payload (`user_constraints` + `accepted_provider_snapshot` + top-level `accepted_findings`). CPM verifies hash + signature, **rejoue A+B**, writes W1 policy. **Wallet proof required.**
 
 ```mermaid
 sequenceDiagram
   participant U as User / UI
   participant D as Discovery v1
   participant C as CPM v1
-  U->>D: GET wallets/scans
-  U->>D: GET wallets/scans/{scan_id}
+  U->>D: GET wallets/scans latest=true W2
+  U->>D: GET wallets/scans by scan_id
   U->>C: GET crypto-policies
-  U->>C: POST policies/decisions/explore<br/>(crypto_policy_id + policy_context)
-  Note over C: couche A → scan_compatible_providers<br/>suggested_user_constraints (indicative)
-  Note over U: Validate my constraints (couche B UI)
-  U->>C: POST drafts (crypto_policy_id, user_constraints, solution_profile_ref)
-  U->>C: POST wallet-challenges
-  Note over U: personal_sign (EOA)
-  U->>C: POST drafts/{draft_id}/persist<br/>(rejeu A+B, accepted_provider_snapshot)
+  U->>C: POST explore with crypto_policy_id and policy_context
+  Note over C: couche A then scan_compatible_providers and W2 gate
+  Note over U: Validate constraints couche B UI and sessionStorage NB2
+  U->>C: POST wallet-challenges with closed hashed payload
+  Note over U: personal_sign EOA
+  U->>C: POST policies signed body rejeu A and B payload_sha256
 ```
 
-## Scan vs explore vs draft vs persist
+## Scan vs explore vs compose vs persist
 
-| Phase | Wallet proof? | CPM route |
+| Phase | Wallet proof? | Route / surface |
 | --- | --- | --- |
 | Scan (Discovery) | No | `POST /api/discovery/v1/scan`, `GET …/wallets/scans/{scan_id}` |
-| Explore (couche A) | No | `POST /api/cpm/v1/policies/decisions/explore` |
-| Platform draft | No | `POST /api/cpm/v1/drafts` |
-| Persist (EOA V1, rejeu A+B) | **Yes** | `POST …/wallet-challenges` then `POST …/drafts/{draft_id}/persist` |
+| Explore (couche A) | No | `POST /api/cpm/v1/policies/decisions/explore` (W2) |
+| Local composition (NB2) | No | Client only — **not** `/drafts*` |
+| Persist (EOA) | **Yes** | `POST …/wallet-challenges` then **`POST …/policies`** (W2) |
 
-Legacy `POST /api/cpm/v1/policies` is **not** the normative EOA persist path; EOA Discovery-bound payloads without signed authorization return **403** `WALLET_CONTROL_PROOF_REQUIRED`.
+**Replace (NB1):** `DELETE /api/cpm/v1/policies?id=…` (JWT) then a new signed persist — not an atomic replace.
 
 ## Capability Provider — solution profile in the flow
 
@@ -98,8 +96,11 @@ Do not send `policy_context` or `selection_request` to the assessment endpoint. 
 | Document | Location |
 |----------|----------|
 | ADR Capability Providers | [cafe-adr — ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) |
+| ADR — remove CP drafts | [cafe-adr — ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) |
 | CPM README — Capability Providers | [cafe-crypto-policy-mgt README](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) |
-| CP-PERSIST V1 (stateless EOA persist) | [../security/cp-persist-v1.md](../security/cp-persist-v1.md) |
+| CP-PERSIST (signed `POST /policies`) | [../security/cp-persist-v1.md](../security/cp-persist-v1.md) |
+| Normative CPM contract | [cafe-crypto-policy-mgt `docs/CP_PERSIST.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CP_PERSIST.md) |
+| OpenAPI | [openapi/cpm-v1.yaml](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/openapi/cpm-v1.yaml) |
 | Integrated narrative (CPM repo) | [cafe-crypto-policy-mgt `docs/CPM_OPTION_A_INTEGRATED.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CPM_OPTION_A_INTEGRATED.md) |
 | Field mapping §3.1 | [cafe-discovery `docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md`](https://github.com/create2-labs/cafe-discovery/blob/main/docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) |
 | API v1 developer guide | [03-cafe-developer-guide.md](../../03-cafe-developer-guide.md) |
@@ -111,15 +112,14 @@ Do not send `policy_context` or `selection_request` to the assessment endpoint. 
 ## Smoke tests
 
 ```bash
-# Explore only (S1–S3 non-regression — no wallet proof)
+# Explore only (no wallet proof)
 export DISCOVERY_EMAIL='user@example.com' DISCOVERY_PASSWORD='secret'
 SKIP_PERSIST=1 ./scripts/test-discovery-v1-wallet-scans-to-cpm.sh
 
-# Full CP-PERSIST V1: scan → explore → draft → sign → persist
-# Nicetry refs are pinned (CPM-P7 done). Remaining smoke debt: FE-P5 E2E / cafe-deploy companion.
+# Full path: scan → explore → challenge → sign → POST /policies
 SKIP_PERSIST=0 ./scripts/test-discovery-v1-wallet-scans-to-cpm.sh
 ```
 
-Run from the `cafe-deploy` repository root; see script `--help` for edge path overrides. Layered CP-PERSIST smokes: `test-cpm-cp-persist-t3` … `t6` (see deploy README).
+Run from the `cafe-deploy` repository root; see script `--help` for edge path overrides. Backend gate: RD-P8 smokes (no SPA required).
 
-> **Known smoke debt:** CPM-P7 (pin Nicetry refs) is **done**. Remaining companion work is **FE-P5** (E2E + cafe-deploy smokes aligned to explore v0.2 / `user_constraints` persist). Draft IDs must still be UUIDs (non-UUID → 503).
+> **Contract note:** `/drafts*` routes are removed. Persist uses signed `POST /api/cpm/v1/policies` with server-authoritative `payload_sha256`.

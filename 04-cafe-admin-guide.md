@@ -379,14 +379,14 @@ Product intent ([functional-specifications.md — Retention](./functional-specif
 
 | Source | Tables | Behavior |
 | --- | --- | --- |
-| User delete (scan / draft / policy) | `scan_results`, `tls_scan_results`, `crypto_policy_drafts`, `crypto_policies` | Row kept with `deleted_at` set — hidden from API lists and W1/W3 guards (partial indexes `WHERE deleted_at IS NULL`) |
-| Policy replacement | `crypto_policies` | Previous row becomes `status = superseded` (still stored; not a soft delete) |
-| Persist idempotence | `draft_persist_state` | After successful persist the draft is hard-deleted, but the state row remains (`completed = true`) so `409 DRAFT_ALREADY_PERSISTED` replays work |
+| User delete (scan / policy) | `scan_results`, `tls_scan_results`, `crypto_policies` | Row kept with `deleted_at` set — hidden from API lists and W1/W3 guards (partial indexes `WHERE deleted_at IS NULL`) |
+| Policy replace (NB1) | `crypto_policies` | DELETE (soft) then new signed persist — not atomic; W1 unique partial on active rows |
+| Persist conflict / retry | `crypto_policies.payload_sha256` | **409** `POLICY_ALREADY_EXISTS` — reconcile via GET + hash compare (no `draft_persist_state`) |
 | Plan quota ledger (IMM-6b) | `scan_usage_events` | **Append-only** — `used` is monotonic; soft-deleting a scan lowers `visible` but **does not** remove ledger rows |
 
 Hot queries stay fast thanks to partial indexes, but **disk and backups grow without bound** until a retention or purge policy is applied. Acceptable for P0/dev; track before long-lived staging or production scale.
 
-Further schema context: [cafe-persistence README — CP tables](https://github.com/create2-labs/cafe-persistence/blob/main/README.md#pourquoi-trois-tables), [RUNBOOK_CP_PERSISTENCE.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_CP_PERSISTENCE.md).
+Further schema context: [cafe-persistence README — CP tables](https://github.com/create2-labs/cafe-persistence/blob/main/README.md) (draft tables **dropped** in RD-P3), [RUNBOOK_CP_PERSISTENCE.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_CP_PERSISTENCE.md), [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md).
 
 ### Monitor size and row pressure
 
@@ -411,7 +411,7 @@ FROM pg_stat_user_tables
 WHERE schemaname = 'public'
   AND relname IN (
     'scan_results', 'tls_scan_results',
-    'crypto_policy_drafts', 'crypto_policies', 'draft_persist_state',
+    'crypto_policies',
     'scan_usage_events'
   )
 ORDER BY pg_total_relation_size(relid) DESC;"
@@ -430,16 +430,8 @@ UNION ALL
 SELECT 'tls_scan_results', COUNT(*) FILTER (WHERE deleted_at IS NULL),
        COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) FROM tls_scan_results
 UNION ALL
-SELECT 'crypto_policy_drafts', COUNT(*) FILTER (WHERE deleted_at IS NULL),
-       COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) FROM crypto_policy_drafts
-UNION ALL
-SELECT 'crypto_policies (persisted)', COUNT(*) FILTER (WHERE status = 'persisted' AND deleted_at IS NULL),
+SELECT 'crypto_policies (active)', COUNT(*) FILTER (WHERE deleted_at IS NULL),
        COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) FROM crypto_policies
-UNION ALL
-SELECT 'crypto_policies (superseded)', COUNT(*) FILTER (WHERE status = 'superseded' AND deleted_at IS NULL), 0
-FROM crypto_policies
-UNION ALL
-SELECT 'draft_persist_state (completed)', COUNT(*) FILTER (WHERE completed), 0 FROM draft_persist_state
 UNION ALL
 SELECT 'scan_usage_events', COUNT(*), 0 FROM scan_usage_events;"
 ```
@@ -460,34 +452,23 @@ SELECT 'scan_usage_events', COUNT(*), 0 FROM scan_usage_events;"
 **Staging-only example** — preview rows eligible for hard-delete (adjust interval and environment):
 
 ```sql
--- Dry run: soft-deleted CP rows older than 90 days
-SELECT id, deleted_at FROM crypto_policy_drafts
+-- Dry run: soft-deleted policies older than 90 days
+SELECT id, deleted_at, payload_sha256 FROM crypto_policies
 WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days';
-
-SELECT id, status, deleted_at FROM crypto_policies
-WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days';
-
--- Dry run: superseded policies older than 90 days (still visible to DB, not to users)
-SELECT id, scan_id, persisted_at FROM crypto_policies
-WHERE status = 'superseded' AND deleted_at IS NULL
-  AND persisted_at < NOW() - INTERVAL '90 days';
 ```
 
 After an approved hard-delete in staging:
 
 ```sql
 -- Example — execute only after dry-run counts match expectation
-DELETE FROM crypto_policy_drafts
+-- crypto_policy_drafts dropped (RD-P3)
+-- DELETE FROM crypto_policies
 WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days';
 
 DELETE FROM crypto_policies
 WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days';
 
--- Optional: completed persist state older than N days (409 replay is immediate-only in practice)
-DELETE FROM draft_persist_state
-WHERE completed = true AND persisted_at < NOW() - INTERVAL '90 days';
-
-VACUUM (ANALYZE) crypto_policy_drafts, crypto_policies, draft_persist_state;
+VACUUM (ANALYZE) crypto_policies;
 ```
 
 Do **not** bulk-delete from `scan_usage_events` to “free space” — that breaks **IMM-6b** monotonic `used` semantics unless coordinated with a contract change.
@@ -496,7 +477,7 @@ Do **not** bulk-delete from `scan_usage_events` to “free space” — that bre
 
 - **W1 / W3:** guards count only active (`deleted_at IS NULL`) persisted policies — hard-deleting already soft-deleted rows is safe; hard-deleting **active** rows is not.
 - **IMM-6b:** `scan_usage_events` is append-only; purging it changes plan `used` accounting.
-- **`draft_persist_state`:** removing recent `completed` rows can weaken `409 DRAFT_ALREADY_PERSISTED` replay behavior for in-flight clients.
+- **Idempotence:** rely on W1 unique + `payload_sha256` reconciliation — no `draft_persist_state` table after RD-P3.
 - **Backups:** smaller live DB does not shrink existing backup objects — align backup retention with legal/audit policy.
 - **Production:** no documented automated purge path yet — coordinate with product and `cafe-persistence` before any hard-delete policy.
 
@@ -637,7 +618,7 @@ A `ProviderManifest` declares one or more `SolutionProfile`(s), each with:
 - `suggested_user_constraints` -- indicative defaults for the UI constraints panel
 - `refs` -- commit/version pointers for pinned verification
 
-**`unpinned_pending_fixture`** is rejected by the persist gate. The shipped Nicetry fixture refs are **pinned** (**CPM-P7** done). Explore, draft, and normative persist work with the pinned fixture; any snapshot that still carries `unpinned_pending_fixture` (or empty commit/version) fails the gate.
+**`unpinned_pending_fixture`** is rejected by the persist gate. The shipped Nicetry fixture refs are **pinned** (**CPM-P7** done). Explore and signed persist work with the pinned fixture; any snapshot that still carries `unpinned_pending_fixture` (or empty commit/version) fails the gate.
 
 ### Catalogue startup signals (ADR §7.2.1 family 1 / CPM-P11a)
 
@@ -671,7 +652,7 @@ When changing catalogue fixtures during development:
    ```bash
    # Soft delete orphaned drafts (dev only -- never in production without sign-off)
    docker exec -e PGPASSWORD=cafe cafe-postgres-dev psql -U cafe -d cafe \
-     -c "UPDATE crypto_policy_drafts SET deleted_at=NOW() WHERE deleted_at IS NULL;"
+     -c "UPDATE crypto_policies SET deleted_at=NOW() WHERE deleted_at IS NULL;"
    ```
 4. Rebuild and restart CPM.
 5. Verify via `GET /api/cpm/v1/crypto-policies` and `GET /api/cpm/v1/providers`.
@@ -718,7 +699,7 @@ When changing catalogue fixtures during development:
 
 ### Persisted policies vs catalogue
 
-**Owner persisted policies** (`GET /api/cpm/v1/policies`, drafts) are separate from the static catalogue. Catalogue changes do **not** mutate user drafts or persisted CPs. Users keep existing work; new explore only affects new selections.
+**Owner persisted policies** (`GET /api/cpm/v1/policies`) are separate from the static catalogue. Catalogue changes do **not** mutate persisted CPs. Users keep existing policies; new explore only affects new compositions.
 
 ---
 
@@ -833,10 +814,10 @@ Compare wallet `chain_ids` from Discovery detail with provider chain support fro
 | “Policy greyed out / incompatible” | Explore rejection code | Catalogue CP `allowed_providers` + provider chain/posture vs scan |
 | “Cannot delete scan” | `409 SCAN_REFERENCED_BY_POLICY` | User must delete or rebind CPM policy first (W3/W4) |
 | “CPM page errors / session” | Browser network tab on `/api/cpm/v1` | CPM auth env, Discovery session validation URL |
-| “Persist failed” / constraints incompatible | Wallet challenge + draft + `user_constraints` | [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md); couche B signal if `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` |
-| Draft on old scan after rescan | Orphan draft (FE-IMM-4) | User must **Rebind to last scan** in CPM UI — not automatic |
+| “Persist failed” / constraints incompatible | Wallet challenge + signed `POST /policies` + `user_constraints` | [CP-PERSIST runbook](./docs/security/cp-persist-v1.md); couche B signal if `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` |
+| Scan not latest on explore/persist | W2 gate | Re-select latest completed scan; **422** `SCAN_NOT_LATEST` |
 
-Admins do **not** mutate user drafts or persisted policies through catalogue files. Catalogue is read-only platform configuration.
+Admins do **not** mutate user persisted policies through catalogue files. Catalogue is read-only platform configuration.
 
 ---
 
@@ -881,6 +862,7 @@ Admins do **not** mutate user drafts or persisted policies through catalogue fil
 - [CPM v1 flow](./docs/architecture/cpm-v1-flow.md) — Option A scan → explore → persist
 - [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md)
 - [CPM auth contract](./docs/security/cpm-contract.md)
-- [CP-PERSIST V1](./docs/security/cp-persist-v1.md)
+- [CP-PERSIST (no drafts)](./docs/security/cp-persist-v1.md)
+- [ADR — remove CP drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)
 - [RUNBOOK_CP_PERSISTENCE](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_CP_PERSISTENCE.md) — durable CP via cafe-persistence
 - [cafe-deploy TODO — Postgres retention](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md#postgres-retention--cp--scan-tables-grow-without-bound-soft-delete) — planned compaction work

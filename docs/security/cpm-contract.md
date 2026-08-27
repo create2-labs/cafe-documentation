@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-CPM is not an anonymous service. It consumes the same Discovery-issued session token used by the rest of the platform, validates it server-side, and derives an authenticated Principal. Scan-bound CPM operations must additionally be authorized against Discovery's scan visibility model. Drafts and persisted policies are scoped to the authenticated owner.
+CPM consumes the same Discovery-issued session token used by the rest of the platform, validates it server-side, and derives an authenticated Principal. Scan-bound CPM operations must additionally be authorized against Discovery's scan visibility model. Persisted policies are scoped to the authenticated owner. **CP drafts are removed** ([ADR_20260824](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)) — composition is client-only; engagement is signed `POST /policies`.
 
 This contract records the authenticated-only behavior implemented across AUTH-01 through AUTH-07 and the API v1 assessment trigger rollout:
 
@@ -10,7 +10,7 @@ This contract records the authenticated-only behavior implemented across AUTH-01
 - The frontend sends the existing Discovery-issued session token to CPM.
 - CPM authenticates the caller and derives server-side identity.
 - Discovery remains the authority for scan visibility.
-- Drafts and policies are owner-scoped.
+- Policies are owner-scoped (no server draft store).
 - Authentication and authorization decisions are server-side.
 - The frontend maps backend outcomes to user-facing UX states; it does not implement CPM authorization rules.
 
@@ -36,7 +36,7 @@ The important service boundaries are:
 
 - Authentication: CPM validates Discovery-issued session tokens before serving business routes.
 - Scan authorization: Discovery answers whether the authenticated Principal can read or use a scan.
-- Owner-scoped persistence: CPM stores and reads drafts and policies under the authenticated owner.
+- Owner-scoped persistence: CPM stores and reads **policies** under the authenticated owner (no `/drafts*`).
 - Frontend UX mapping: the frontend renders states from CPM responses but does not decide access.
 
 ## 3. Authentication Model
@@ -70,15 +70,13 @@ Every CPM route must be explicitly classified. No unclassified CPM business rout
 | `/api/cpm/v1/providers` | `GET` | Authenticated business endpoint | Discovery session required |
 | `/api/cpm/v1/providers/{provider_id}` | `GET` | Authenticated business endpoint | Discovery session required |
 | `/api/cpm/v1/policies/decisions/explore` | `POST` | Authenticated business endpoint | Discovery session required; scan authorization when scan-bound; explore v0.2 (`crypto_policy_id` + `policy_context`); legacy body → **400** |
-| `/api/cpm/v1/wallet-challenges` | `POST` | Authenticated business endpoint | Discovery session required; stateless canonical message helper (CP-PERSIST V1); stores nothing |
-| `/api/cpm/v1/drafts/{draft_id}/persist` | `POST` | Authenticated business endpoint | Discovery session required; **normative EOA CP persist** — requires `signed_message` + `signature` (CP-PERSIST V1) |
-| `/api/cpm/v1/drafts` | `POST` | Authenticated business endpoint | Discovery session required; owner-scoped |
-| `/api/cpm/v1/drafts?id=...` | `GET` | Authenticated business endpoint | Discovery session required; owner-scoped |
-| `/api/cpm/v1/policies` | `POST` | Authenticated business endpoint | Discovery session required; owner-scoped |
-| `/api/cpm/v1/policies?id=...` | `GET` | Authenticated business endpoint | Discovery session required; owner-scoped |
+| `/api/cpm/v1/wallet-challenges` | `POST` | Authenticated business endpoint | Discovery session required; stateless canonical message helper (payload hash + W2); stores nothing |
+| `/api/cpm/v1/policies` | `POST` | Authenticated business endpoint | Discovery session required; **normative EOA CP persist** — signed body (`payload` + `signed_message` + `signature`); W2; owner-scoped |
+| `/api/cpm/v1/policies?id=...` | `GET` | Authenticated business endpoint | Discovery session required; owner-scoped; exposes `payload_sha256` |
+| `/api/cpm/v1/policies?id=...` | `DELETE` | Authenticated business endpoint | Discovery session required; JWT only (NB1); optional `reason` best-effort |
 | `/api/cpm/v1/policies/assessment/request` | `POST` | Authenticated business endpoint | Discovery session required; wallet-scan only; body `scan_id` + `crypto_policy_id`; no client `policy_context` / `selection_request` |
 | `/internal/policies/references/scan` | `POST` | Internal service endpoint | Service Bearer token required when `CPM_AUTH_REQUIRED=true` |
-| Deprecated or disabled routes | Any | Deprecated/disabled | Must remain disabled or be explicitly reclassified before use — includes retired `/policies/templates`, `/policies/instances`, `/policies/catalog` |
+| Deprecated or disabled routes | Any | Deprecated/disabled | Must remain disabled — includes retired `/policies/templates`, `/policies/instances`, `/policies/catalog`, and **removed** `/api/cpm/v1/drafts*` (no shim) |
 
 Future routes must be classified as public health/readiness, authenticated business endpoint, or deprecated/disabled before they are enabled.
 
@@ -86,7 +84,7 @@ Future routes must be classified as public health/readiness, authenticated busin
 
 CPM delegates scan visibility decisions to Discovery. CPM must not read Discovery persistence directly.
 
-Any CPM request carrying `scanId` or `scan_id` triggers scan authorization. CPM extracts scan IDs from the top-level payload and from draft payloads. If multiple scan IDs are present, they must be identical. Conflicting scan IDs return `400`; malformed or empty scan IDs return `400`.
+Any CPM request carrying `scanId` or `scan_id` triggers scan authorization. CPM extracts scan IDs from the top-level payload (and nested policy payload bindings when present). If multiple scan IDs are present, they must be identical. Conflicting scan IDs return `400`; malformed or empty scan IDs return `400`. Explore / wallet-challenges / signed persist additionally enforce **W2** (latest completed for owner+address) — see [CP-PERSIST runbook](./cp-persist-v1.md).
 
 For a valid scan-bound request, CPM calls Discovery to ask whether the authenticated Principal can read or use the scan. CPM fails closed if Discovery scan authorization is unavailable.
 
@@ -165,16 +163,15 @@ Default TLS entries are admin-provisioned public/system entries. They are not us
 
 ## 6. Owner-Scoped Persistence Model
 
-Drafts and policies are scoped to the authenticated Principal. `owner_user_id` and optional `tenant_id` are derived server-side. Client payloads cannot set or override owner fields.
+Persisted policies are scoped to the authenticated Principal. `owner_user_id` and optional `tenant_id` are derived server-side. Client payloads cannot set or override owner fields. **There is no server draft resource** (`/drafts*` removed).
 
 Owner-scoped routes:
 
-- `POST /api/cpm/v1/drafts`
-- `GET /api/cpm/v1/drafts?id=...`
-- `POST /api/cpm/v1/policies`
-- `GET /api/cpm/v1/policies?id=...`
+- `POST /api/cpm/v1/policies` (signed EOA persist)
+- `GET /api/cpm/v1/policies` / `GET /api/cpm/v1/policies?id=...`
+- `DELETE /api/cpm/v1/policies?id=...`
 
-Cross-user read or update returns `403`. Missing Principal returns `401`. Anonymous legacy records are inaccessible under the owner-scoped model. No backfill is included in the current rollout unless separately implemented; local and dev data may need to be regenerated.
+Cross-user read or update returns `403`. Missing Principal returns `401`. Anonymous legacy records are inaccessible under the owner-scoped model. No backfill is included in the current rollout unless separately implemented; local and dev data may need to be regenerated (RAZ of test policies authorized — ADR_20260824).
 
 ## 7. Error Contract
 
@@ -244,7 +241,7 @@ Required dev e2e cases:
 - Valid Discovery token succeeds.
 - Valid token with forbidden scan returns `403`.
 - Valid token with allowed scan succeeds.
-- Owner-scoped draft/policy anonymous access returns `401`.
+- Owner-scoped policy anonymous access returns `401`.
 - Owner-scoped cross-user access returns `403`.
 - CPM internal policy reference: valid service token + body → `200` with `referenced` boolean; wrong token → `403`; missing server token config → `503`.
 - CPM assessment request: wallet scan → `202`; body with `policy_context` → `400`; unknown, unauthorized, TLS, or non-wallet scan → `404`; Discovery outage → `503`.
@@ -315,13 +312,16 @@ Logs may include `request_id`, route, method, category, outcome, reason code, an
 | CPM assessment request returns `503` | Discovery authz/detail lookup unavailable or CPM cannot publish the async command. | Check `CAFE_SCAN_AUTHORIZATION_URL`, `CAFE_DISCOVERY_HTTP_BASE`, `CPM_NATS_URL`, service tokens, and CPM logs keyed by `request_id`. |
 | CPM **`POST /internal/policies/references/scan`** returns **`503 AUTH_INTERNAL_MISCONFIGURED`** | `CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN` unset while `CPM_AUTH_REQUIRED=true`. | Set a non-empty token on **cafe-cpm**; align Discovery (PR6) to send the same Bearer; see `cafe-deploy` `env/*.env.template`. |
 | CPM internal reference returns **`403`** from CPM | Wrong `Authorization: Bearer` for the internal call. | Rotate/sync `CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN` with Discovery’s outbound secret. |
-| Draft/policy returns `403 AUTHZ_OWNER_FORBIDDEN` | User is trying to read or update another user's draft/policy; owner fields were migrated incorrectly; stale local/dev data. | Verify `owner_user_id`; verify `tenant_id` if present; regenerate dev data if the record is anonymous legacy data. |
-| EOA persist returns **`403 WALLET_CONTROL_PROOF_REQUIRED`** | Legacy `POST /api/cpm/v1/policies` or normative persist without valid signed authorization. | Use `POST /api/cpm/v1/wallet-challenges` → sign → `POST /api/cpm/v1/drafts/{draft_id}/persist`. See [CP-PERSIST V1 runbook](./cp-persist-v1.md). |
-| Persist returns **`400 CRYPTO_POLICY_PAYLOAD_INVALID`** | Payload missing `schema_version: "cafe.crypto_policy.v0.2"`, missing `crypto_policy_id` / `user_constraints` / `accepted_provider_snapshot`, or refs are `unpinned_pending_fixture`. | Ensure draft uses v0.2 schema with pinned Nicetry refs (CPM-P7 done). |
+| Policy returns `403 AUTHZ_OWNER_FORBIDDEN` | User is trying to read or update another user's policy; owner fields were migrated incorrectly; stale local/dev data. | Verify `owner_user_id`; verify `tenant_id` if present; regenerate dev data if the record is anonymous legacy data. |
+| EOA persist returns **`403 WALLET_CONTROL_PROOF_REQUIRED`** | Signed `POST /policies` without valid signed authorization. | Use `POST /api/cpm/v1/wallet-challenges` → sign → `POST /api/cpm/v1/policies`. See [CP-PERSIST runbook](./cp-persist-v1.md). |
+| Persist / challenge returns **`422 SCAN_NOT_LATEST`** | `scan_id` is not latest completed for owner+address (W2). | Re-select W2 scan; re-explore; see [CP-PERSIST runbook](./cp-persist-v1.md). |
+| Persist / challenge / explore returns **`503 DISCOVERY_UNAVAILABLE`** | Discovery W2 lookup failed (fail-closed). | Check Discovery health and CPM Discovery env/tokens. |
+| Persist returns **`400 CRYPTO_POLICY_PAYLOAD_INVALID`** | Payload missing closed hashed fields, `null`/`number` in hashed subtree, divergent snapshot findings, or unpinned refs. | Align to OpenAPI + `payload_sha256` vectors; pinned Nicetry refs (CPM-P7 done). |
 | Persist returns **`400 PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`** | Couche B KO after rejeu A+B. | Adjust `user_constraints` or select another scan-compatible provider; see runtime signal `adr_signal=runtime.no_provider_after_user_constraints`. |
-| Persist returns **`422 UNSUPPORTED_WALLET_TYPE`** | Non-EOA platform draft (Smart Account, etc.). | CP-PERSIST V1 is EOA-only; explore and draft save still work without proof. |
-| Persist returns **`409 DRAFT_ALREADY_PERSISTED`** | Second persist on same draft after success. | Expected persist-once semantics; create a new draft if a new CP is needed. |
-| Persist returns binding / expiry wallet authorization errors | Wrong draft/scan/wallet in signed message; message expired (>10 min). | Re-run `wallet-challenges`, re-sign; do not edit canonical message. See [CP-PERSIST V1 runbook](./cp-persist-v1.md). |
+| Persist returns **`422 UNSUPPORTED_WALLET_TYPE`** | Non-EOA target (Smart Account, etc.). | Persist V1 is EOA-only; explore still works without proof. |
+| Persist returns **`409 POLICY_ALREADY_EXISTS`** | Active policy already present (retry or W1 conflict). | `GET /policies` + compare `payload_sha256`; replace via NB1 DELETE then re-persist. |
+| Persist returns binding / expiry / hash errors | Wrong scan/wallet/chain in signed message; message expired; `PAYLOAD_SHA256_MISMATCH`. | Re-run `wallet-challenges`, re-sign; do not edit canonical message. See [CP-PERSIST runbook](./cp-persist-v1.md). |
+| Caller uses `/drafts*` | Stale client against post-RD-P5 CPM. | Routes removed — migrate to signed `POST /policies`. |
 | Frontend redirects unexpectedly instead of showing CPM banner | Request missing CPM auth UX marker; interceptor regression; request not going through CPM data-source boundary. | Inspect frontend request config; run AUTH-07 tests. |
 | E2E AUTH-06 fails forbidden/allowed scan cases | Test scan fixture not owned by expected user; Discovery AUTH-05 not deployed in image; service token mismatch; default TLS public fixture confused with user-created scan. | Verify fixture setup; verify scan owner; verify Discovery endpoint path; verify service token. |
 | `curl`/`bash` callers see TLS verify failures or opaque failures against **`https://`** gateways | Untrusted issuer (self-signed, private CA); hostname mismatch; wrong port/path. | Use a CA trusted by the client machine, or **`curl -k`** only in dev (`CURL_INSECURE=1` in [`wallet-scan-and-cpm-policy.sh`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/scripts/wallet-scan-and-cpm-policy.sh)); confirm URL matches Ingress / load-balancer **`https`** frontend. |

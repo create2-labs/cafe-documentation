@@ -113,7 +113,7 @@ Non-goals for this document: line-by-line OpenAPI field lists (see per-repo `ope
 ### CPM ↔ Discovery coupling
 
 - **Synchronous:** CPM HTTP handlers call Discovery v1 wallet scan list/detail (service token or user token per route class).
-- **Guards:** `internal/app/auth.go` — W7 (`limit=1` newest row), W2 (`latest=true`), TLS rejection.
+- **Guards:** `internal/app/auth.go` — W2 (`latest=true` completed, owner-scoped), TLS rejection. Legacy W7-only narratives superseded for CPM engagement (ADR_20260824 / RD-P6).
 - **Async:** `POST …/policies/assessment/request` loads wallet detail server-side; rejects TLS.
 
 See [docs/architecture/cpm-v1-flow.md](./docs/architecture/cpm-v1-flow.md) and [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md).
@@ -176,18 +176,18 @@ Redis is used for **scan** acceleration only — not for durable crypto policies
 | Domain | Postgres | Redis (P0) |
 | --- | --- | --- |
 | **Wallet/TLS scans** | Source of truth (`scan_results`, `tls_scan_results`) | Optional accelerator: result cache (`wallet:user:…`, `tls:user:…`), pending v1 keys; v1 list/detail authoritative in Postgres |
-| **Crypto policies (CP)** | Source of truth (`crypto_policy_drafts`, `crypto_policies`, `draft_persist_state`) | **Not used** — CPM and Discovery W1/W3 call cafe-persistence `internal/cp/v1` → Postgres only |
+| **Crypto policies (CP)** | Source of truth (`crypto_policies` only; draft tables dropped RD-P3) | **Not used** — CPM and Discovery W1/W3 call cafe-persistence `internal/cp/v1` → Postgres only |
 
 - Delete wallet scan: evict Redis address key only when **no** remaining Postgres rows for that address.
 - Optional Redis CP cache (`cpm:v1:…`) is **P1+** only (ADR §8.2); never replaces Postgres.
-- CP-PERSIST V1 wallet challenges are stateless (no Redis proof store) — see [cp-persist-v1.md](./docs/security/cp-persist-v1.md).
+- Wallet challenges are stateless (no Redis proof store); signed persist is `POST /policies` — see [cp-persist-v1.md](./docs/security/cp-persist-v1.md).
 
 ### Error codes (representative)
 
 | Code | HTTP | When |
 | --- | --- | --- |
 | `SCAN_IN_PROGRESS` | 409 | W8 — newest `requested` or `started` |
-| `CPM_EXISTS_FOR_WALLET_TARGET` | 409 | W1 — **persisted policy** on address (legacy combined policy+draft; prefer `blocking_kind: "policy"` after IMM-W1-4) |
+| `CPM_EXISTS_FOR_WALLET_TARGET` | 409 | W1 — **persisted policy** on address (prefer `blocking_kind: "policy"`) |
 | `SCAN_REFERENCED_BY_POLICY` | 409 | W3 — DELETE scan with CPM reference |
 | `chain_id` without `address` | 400 | Invalid list query |
 
@@ -206,7 +206,7 @@ Redis is used for **scan** acceleration only — not for durable crypto policies
 | --- | --- |
 | `cmd/cafe-cpm` | Entrypoint |
 | `internal/app/auth.go` | Scan immutability guards, Discovery client |
-| `internal/app/authz_scan_test.go` | W2, W7, TLS rejection tests |
+| `internal/app/authz_scan_test.go` | W2 / scan authz tests |
 | `internal/api/` | HTTP handlers (read, explore, persist); explore observability hook (**IMM-OPS-1**) |
 | `internal/metrics/` | Prometheus registry; `cpm_explore_no_deployable_candidate_total` |
 | `internal/domain/policy/` | Policy models and evaluation |
@@ -298,30 +298,24 @@ Emitted once per qualifying explore. Investigable fields (non-exhaustive):
 
 - Repository: `cafe-frontend`
 - Consumes `/api/discovery/v1` and `/api/cpm/v1` through edge.
-- **Option A flow:** scan selector → detail → `policy_context` → explore → backend draft → wallet-challenges → sign → `drafts/{draft_id}/persist` (CP-PERSIST V1).
-- **Scan immutability UX (FE-IMM-0…14):** W1 rescan guards, orphan draft rebind (**FE-IMM-4**), W7/W2 scan selection, DELETE policy/scan, P1 quota breakdown, data-integrity mappers — see [`IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md) and [`IMMUTABILITE_PR.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE_PR.md).
-- **CPM graph workspace (CPM-UI-1…8):** graph-first page spec and user stories **US1–US21** in [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md); product summary in [functional-specifications.md — CPM UI](./functional-specifications.md#cpm-user-interface--graph-workspace-us1us21).
+- **Option A flow:** scan selector → detail → `policy_context` → explore (W2) → local composition (NB2) → wallet-challenges → sign → **`POST /policies`** (signed; `payload_sha256`).
+- **Scan immutability UX:** W1 rescan guards, W2 scan anchoring, DELETE policy/scan (NB1), quota / integrity mappers — orphan draft rebind **removed** (RD-P10–P12). See [`IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md) (formal amend → RD-P14) and [ADR_20260824](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md).
+- **CPM composition workspace:** solution-profile UI in [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md); product summary in [functional-specifications.md — CPM UI](./functional-specifications.md#cpm-user-interface--composition-workspace).
 
-### CPM graph workspace (CPM-UI-1…8 / US1–US21)
+### CPM composition workspace (post–remove drafts)
 
-Delivery epics merged in `cafe-frontend` (2026-06). Normative acceptance: [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md).
+Delivery history (CPM-UI-1…8) assumed server drafts; **runtime path** after RD-P9–P12 is draft-free. Treat draft lifecycle epics as historical.
 
-| Epic | Focus | User stories |
-| --- | --- | --- |
-| **CPM-UI-1** | Graph shell, empty state, scan selection | US1, US2 |
-| **CPM-UI-2** | Catalog, draft lifecycle, save/resume | US3–US5 |
-| **CPM-UI-3** | Persisted read-only + replacement draft display | US6, US7 |
-| **CPM-UI-4** | Persist + replace (CP-PERSIST V1 wiring) | US8, US9 |
-| **CPM-UI-5** | Delete with confirmation | US10, US11 |
-| **CPM-UI-6** | Graph-only workspace, entry modes, modals, leave guard, headers | US12–US17, US19, US20 |
-| **CPM-UI-7** | Platform Status CPM version tile | US18 |
-| **CPM-UI-8** | Single **Persist** CTA — implicit local validation (**US21**) | US8, US9, US21 |
+| Concern | Current behavior |
+| --- | --- |
+| Composition | Client editor + optional NB2 `sessionStorage` by `scan_id` |
+| Persist | Challenge → EIP-191 → signed `POST /policies` |
+| Replace | NB1 DELETE then re-persist |
+| Resume | Session / deep link; no server draft CRUD |
 
-**Key modules:** `CryptoPolicyManagement.vue`, `PolicyGraph.vue`, `policyGraphShellCompose.ts`, `useCpmScanContext.ts`, `useCpmPolicySelection.ts`, `usePolicyValidation.ts`, `usePolicyPersistence.ts`, `useCpmWorkspaceSession.ts`, `cpmUnsavedDraftLeaveGate`.
+**Persist UX:** local structural validation at start of **Persist**; wallet-challenge only after it succeeds. See [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
 
-**Persist UX (CPM-UI-8):** `validatePolicyDraft` runs at start of **Persist**; no separate Validate button; wallet-challenge only after local validation succeeds. See [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md).
-
-**Entry modes:** cold start (State 2 picker, no default scan), session resume (`useCpmWorkspaceSession`), Discovery `?scanId=`, in-page scan change with backend hydration (**CPM-UI-6I**).
+**Entry modes:** cold start scan picker, session resume, Discovery `?scanId=`, in-page scan change with W2 re-anchor.
 
 ### Platform Status versions (CPM-UI-7A)
 
@@ -389,7 +383,7 @@ Soft-delete and owner scoping apply per implementation.
 
 ### CPM persistence
 
-- Owner-scoped in-memory or configured store for drafts and policy instances (deployment-dependent).
+- Owner-scoped policy persistence via cafe-persistence (`CPM_STORE=persistence`); no draft store.
 - Policies reference `scan_id` UUID; no foreign key into Discovery DB.
 
 ---
@@ -421,7 +415,7 @@ Events must not upsert by `(user_id, address)` in a way that replaces `scan_id`.
 | Layer | Location | Purpose |
 | --- | --- | --- |
 | Unit / contract | `cafe-discovery/internal/contract/`, `internal/handler/*_test.go` | API envelopes, guards, immutability |
-| CPM authz | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go` | W2, W7, TLS |
+| CPM authz | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go` | W2 / scan authz |
 | Smoke | `cafe-deploy/scripts/test-*.sh` | Cross-service E2E |
 | QA checklist | [docs/api/api-v1-qa-checklist.md](./docs/api/api-v1-qa-checklist.md) | Release sign-off |
 

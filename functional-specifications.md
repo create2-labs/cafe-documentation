@@ -39,7 +39,7 @@
          4. [Read policies](#read-policies)
          5. [Delete](#delete-2)
          6. [Assessment (async)](#assessment-async)
-      5. [Policy drafts (CPM)](#policy-drafts-cpm)
+      5. [Composition (no server draft)](#composition-no-server-draft)
          1. [Create / read](#create--read)
          2. [Delete](#delete-3)
       6. [Remediation (product direction)](#remediation-product-direction)
@@ -88,7 +88,7 @@ The platform operationalizes crypto-agility: policies and scan results evolve un
 | --- | --- |
 | Authenticated wallet and TLS scan lifecycle under Discovery v1 | Pure post-quantum TLS certificates (PKI not ready) |
 | Scan history per target; immutable terminal results | CPM policies or assessment on TLS `scan_id` |
-| CPM catalog, explore, persist, drafts, async assessment (wallet) | Automated TLS endpoint remediation |
+| CPM catalog, explore, signed persist, async assessment (wallet) | Automated TLS endpoint remediation |
 | CBOM per wallet `scan_id` (on-demand) | Native mobile clients |
 | Owner-scoped lists, detail, delete with CPM guards | |
 
@@ -97,7 +97,7 @@ The platform operationalizes crypto-agility: policies and scan results evolve un
 CAFE is delivered as **multiple services** behind an edge proxy:
 
 - **Discovery** — scan orchestration, persistence, public v1 HTTP API, authentication.
-- **Crypto Policy Manager (CPM)** — policy catalog, decision exploration, persisted policies, drafts.
+- **Crypto Policy Manager (CPM)** — policy catalog, decision exploration, persisted policies (client composition only — no server drafts).
 - **Remediation** — execution layer for PQC migration (roadmap; separate repository).
 - **Frontend** — web UI for Discovery, CPM, and platform flows.
 - **Deploy / edge** — routing, smoke tests, operational runbooks.
@@ -143,7 +143,7 @@ CAFE processes, per authenticated user:
 - Account identifiers (email, session tokens).
 - Wallet addresses and chain identifiers submitted for scans.
 - TLS endpoint URLs submitted for scans.
-- Scan results, policy payloads, and draft content owned by the user.
+- Scan results and policy payloads owned by the user.
 - Operational logs (access, errors) for security and support.
 
 Processing is justified by **legitimate interest** in cryptographic risk assessment and contract fulfillment for alpha testers.
@@ -154,7 +154,7 @@ Users may request, subject to applicable law:
 
 - **Access** to personal data held for their account.
 - **Rectification** of account metadata.
-- **Erasure** (“right to be forgotten”) — account and owned artifacts deleted per product rules (scans, policies, drafts).
+- **Erasure** (“right to be forgotten”) — account and owned artifacts deleted per product rules (scans, policies).
 - **Portability** — export of owned scan and policy data where technically supported.
 
 ### Security and data protection
@@ -214,7 +214,7 @@ CAFE follows [OWASP](https://owasp.org/) practices, including:
 
 #### Delete account
 
-- User can request account deletion; owned scans, policies, and drafts are removed per cascade rules.
+- User can request account deletion; owned scans and policies are removed per cascade rules.
 
 ### Wallet scans (Discovery)
 
@@ -222,7 +222,7 @@ CAFE follows [OWASP](https://owasp.org/) practices, including:
 
 - **`POST /api/discovery/v1/scan`** with `{ "address": "0x…" }`.
 - Server allocates **`scan_id`** (UUID) at acceptance (`requested`), before async pipeline publish.
-- Guards (**W8**, then **W1**): refuse if a scan is in progress (`409 SCAN_IN_PROGRESS`) or if a **persisted CPM policy** exists for the target address (`409`, prefer `blocking_kind: "policy"`). **Platform draft alone** does not block rescan (**IMM-W1-4**).
+- Guards (**W8**, then **W1**): refuse if a scan is in progress (`409 SCAN_IN_PROGRESS`) or if a **persisted CPM policy** exists for the target address (`409`, prefer `blocking_kind: "policy"`). There is **no** platform draft resource that blocks or accompanies rescan.
 - Re-scan after **`failed`** is allowed when guards pass; creates a **new** row and **new** `scan_id`.
 
 #### Read
@@ -284,23 +284,25 @@ States: `requested` → `started` → `completed` | `failed` (or `requested` →
 #### Explore (preview) — couche A
 
 - **`POST /api/cpm/v1/policies/decisions/explore`** with optional `scan_id`, **`crypto_policy_id`**, **`policy_context`**.
-- Guards: **W7** (newest row must be `completed`), **W2** (`scan_id` must match latest completed for target), wallet-only (**TLS -> 404**).
+- Guards: **W2** (`scan_id` must match latest completed for owner+address), wallet-only (**TLS -> 404**). Discovery fail-closed → **503**.
 - **Wire v0.2:** no `selection_request`; no couche B fields (`allow_new_wallet`, `address_continuity_required`, `key_rotation_model`, `target_posture`). Legacy explore → HTTP **400**.
 - **Couche A (ADR amendement):** CPM returns **`scan_compatible_providers`** by matching catalogue CP posture + `allowed_providers` against provider SolutionProfiles (deployable chain + capabilities, including `rotate_signer` when profile is `per_userop`). Hard codes: `incompatible.posture`, `incompatible.provider.chain`, `incompatible.provider.rotation`, `incompatible.provider.wallet_type`. Response carries `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, soft findings, and indicative **`suggested_user_constraints`**. No `graphEdges` / `nodeInstances` / `node_path`.
 - **Vocabulary:** **scan-compatible** (couche A), **user-qualified** (couche B UI indicative), **persistable** (CPM rejeu A+B). Avoid `ranked_candidates` as normative vocabulary.
 - **`claim_status: "declared"`** means the provider declared this capability -- it is **not** an audited or executed proof.
 - **No scan-compatible provider (HTTP 200):** when `scan_compatible_providers` is empty and `rejected_candidates` is non-empty, the response is still **success**. The SPA explains why (**REQ8**). Platform ops consume **REQ9** / ADR §7.2.1 family-2 signal ([operations runbook](./docs/operations/cpm-explore-no-candidate-observability.md)): `cpm.explore.no_deployable_candidate` + `adr_signal=runtime.no_scan_compatible`, counter `cpm_explore_no_deployable_candidate_total`.
 
-#### Persist (EOA -- CP-PERSIST V1) — rejeu A+B
+#### Persist (EOA — signed `POST /policies`) — rejeu A+B
 
-- **Normative EOA path:** `POST /api/cpm/v1/wallet-challenges` (mandatory stateless canonical message) -> EIP-191 / `personal_sign` -> **`POST /api/cpm/v1/drafts/{draft_id}/persist`** with `signed_message` + `signature`.
-- **Wallet proof required** for persist. Scan, explore, and platform draft save do **not** require proof (non-regression S1-S3).
-- **Persist payload v0.2:** `schema_version: "cafe.crypto_policy.v0.2"` with **`crypto_policy_id`** (not `template_id`), **`user_constraints`**, `required_posture`, `solution_profile_ref`, `accepted_provider_snapshot` (pinned refs + accepted soft findings). Nicetry refs are pinned (**CPM-P7** done).
-- CPM **rejoue couche A then B**; couche B failure → **400** `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` (runtime signal `adr_signal=runtime.no_provider_after_user_constraints`).
-- Same immutability guards as explore (**W7**, **W2**, wallet-only, TLS -> **404**).
-- Legacy **`POST /api/cpm/v1/policies`** is **not** the normative EOA persist endpoint; Discovery-bound EOA payloads without signed authorization return **403** `WALLET_CONTROL_PROOF_REQUIRED`.
-- V1 persist is **EOA-only**; non-EOA drafts return **422** `UNSUPPORTED_WALLET_TYPE` on persist routes.
-- Details: [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md).
+- **Normative EOA path:** `POST /api/cpm/v1/wallet-challenges` (stateless canonical message + `payload_sha256`) → EIP-191 / `personal_sign` → **`POST /api/cpm/v1/policies`** with closed `payload` + `signed_message` + `signature`.
+- **Wallet proof required** for persist. Scan, explore, and **local composition** (NB2 sessionStorage) do **not** require proof.
+- **No server drafts:** `/api/cpm/v1/drafts*` removed ([ADR_20260824](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)).
+- **Persist payload v0.2:** `schema_version: "cafe.crypto_policy.v0.2"` with closed hashed fields including top-level **`accepted_findings`**. Server computes/stores `payload_sha256` (JCS). Nicetry refs are pinned (**CPM-P7** done).
+- CPM **rejoue couche A then B**; couche B failure → **400** `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`.
+- **W2** on explore / challenge / persist: non-latest → **422** `SCAN_NOT_LATEST`; Discovery down → **503** `DISCOVERY_UNAVAILABLE`.
+- EOA without signed authorization → **403** `WALLET_CONTROL_PROOF_REQUIRED`. Active policy conflict / retry → **409** `POLICY_ALREADY_EXISTS` (reconcile via GET + `payload_sha256`).
+- **NB1 replace:** DELETE policy (JWT) then new signed persist — not atomic.
+- V1 persist is **EOA-only**; non-EOA → **422** `UNSUPPORTED_WALLET_TYPE`.
+- Details: [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
 
 #### Read policies
 
@@ -314,15 +316,11 @@ States: `requested` → `started` → `completed` | `failed` (or `requested` →
 
 - **`POST /api/cpm/v1/policies/assessment/request`** — wallet scans only; body **`scan_id` + `crypto_policy_id`** only; server loads Discovery detail; client must not send `policy_context` or `selection_request` (HTTP → **400**; NATS → validation error).
 
-### Policy drafts (CPM)
+### Composition (no server draft)
 
-#### Create / read
-
-- **`POST /api/cpm/v1/drafts`**, **`GET /api/cpm/v1/drafts?id=…`** — owner-scoped working state before persist.
-
-#### Delete
-
-- **`DELETE /api/cpm/v1/drafts?id=…`** — removes platform draft; satisfies **W1** for rescan when no persisted policy remains.
+- Working composition lives **client-side** (page memory / `sessionStorage` indexed by `scan_id` — **NB2**). It is **not** a CPM API resource.
+- **Removed:** `POST|GET|DELETE /api/cpm/v1/drafts` and `POST /api/cpm/v1/drafts/{id}/persist`.
+- Rescan / W1 concern only **persisted** policies. Orphan draft / rebind product flows are **retired**.
 
 ### Remediation (product direction)
 
@@ -334,21 +332,19 @@ Rules **W1–W8** apply to **wallet** targets with CPM `binding=discovery`:
 
 | ID | Rule | Discovery | CPM |
 | --- | --- | --- | --- |
-| **W1** | **Persisted policy** blocks rescan; **platform draft alone** does **not** block (`IMM-W1-4`) | `POST …/scan` → `409` when **policy** on address (prefer `blocking_kind: "policy"`) | Lookup policies for POST guard |
-| **W1b** | **Orphan draft** after rescan — CPM workflow blocked until **rebind** to latest **completed** scan | — | Explore/validate/persist blocked until draft on **W2** `scan_id` |
-| **W2** | CPM only on latest **`completed`** scan | `GET …/wallets/scans?address=&latest=true` | `400` if `scan_id` ≠ latest completed |
+| **W1** | **Persisted policy** blocks rescan (at most one active policy per owner+address) | `POST …/scan` → `409` when **policy** on address (prefer `blocking_kind: "policy"`) | Lookup policies for POST guard |
+| **W2** | CPM only on latest **`completed`** scan for **owner+address** | `GET …/wallets/scans?address=&latest=true` | Explore / challenge / persist → **422** `SCAN_NOT_LATEST` if non-latest; Discovery fail → **503** |
 | **W3** | Delete scan only after policies removed | `409 SCAN_REFERENCED_BY_POLICY` | User deletes policies first |
-| **W4** | Delete policy does not delete scans | Unchanged | `DELETE …/policies?id=` only |
+| **W4** | Delete policy does not delete scans | Unchanged | `DELETE …/policies?id=` only (JWT; NB1) |
 | **W5** | History per address | `GET …/wallets/scans?address=` | Read-only correlation |
 | **W6** | CBOM per scan execution | `GET …/wallets/scans/{scan_id}/cbom` | No CBOM storage |
-| **W7** | CPM blocked until newest row is **`completed`** | No POST guard | `400 LATEST_SCAN_NOT_COMPLETED` |
-| **W8** | Rescan blocked only while in progress | `409 SCAN_IN_PROGRESS` if `requested`/`started` | Independent of W7 |
+| **W8** | Rescan blocked only while in progress | `409 SCAN_IN_PROGRESS` if `requested`/`started` | Independent of W2 |
 
-**Guard order:** `POST …/scan` — **W8** then **W1**. CPM explore/persist — **W7** then **W2**.
+**Retired:** **W1b** orphan draft / rebind; product **W7** “newest row must be completed” as a separate explore gate — ADR_20260824 / RD-P6 keep **W2 only** (`latest=true` completed). Full IMM doc amend → RD-P14.
 
-**W7 vs W8:** CPM may stay blocked while Discovery allows rescan after `failed` (e.g. completed scan A + newer failed scan B).
+**Guard order:** `POST …/scan` — **W8** then **W1**. CPM explore / challenge / persist — **W2** (owner-scoped latest completed).
 
-**Client UX (draft + rescan, tranché 2026-06):** rescan is allowed with a **platform draft** on the address. The draft may stay on an older `scan_id` until the user clicks **Rebind to last scan for this address** (upsert `POST /api/cpm/v1/drafts` onto **W2**). **Explore**, **validate**, and **persist** stay blocked while the draft is orphaned. **`wallet_type`** must match on rebind or the UI refuses. **No** local export / `localStorage` / client reload. **Persisted policy** still blocks rescan. See [cafe-frontend IMMUTABILITE.md](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md).
+**Client UX (no server draft):** composition is local (NB2). Rescan does not create orphan drafts. FE anchors on W2. **Persisted policy** still blocks rescan. See [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) and [cafe-frontend IMMUTABILITE.md](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md) (formal REQ10/REQ14 amend → RD-P14).
 
 ### Platform observability — CPM explore no scan-compatible provider (REQ9)
 
@@ -410,85 +406,48 @@ Authenticated users can confirm which **deployed builds** are running from **Pla
 
 **Out of scope:** catalog `catalog_version`, template `version` fields, or CPM policy instance metadata.
 
-### CPM user interface — graph workspace (US1–US21)
+### CPM user interface — composition workspace
 
-The **Crypto Policy Management** page (`/crypto-policy-management`) is a **Capability Provider workspace** for EOA wallet scans only. TLS scans are never CPM targets. The UI shows a **solution profile view** (scénario A): candidate list + structured provider card (input / account / signature / posture blocks). No policy graph (nodes/edges) in the normative UI. Normative UI acceptance criteria live in [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) (delivery epics **CPM-UI-1...8**). See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
+The **Crypto Policy Management** page (`/crypto-policy-management`) is a **Capability Provider workspace** for EOA wallet scans only. TLS scans are never CPM targets. The UI shows a **solution profile view** (scénario A): candidate list + structured provider card. No policy graph (nodes/edges) in the normative UI. Normative UI acceptance criteria live in [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md). See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) and [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md).
 
 #### Vocabulary (UI)
 
 | Term | Meaning |
 | --- | --- |
-| **Draft** | Non-actionable in-progress CP configuration (platform draft on backend) |
-| **Persisted CP** | Currently **recommended** policy for a scan (owner-scoped, wallet-signed at persist) |
-| **Replacement draft** | Draft prepared while a persisted CP already exists; does not change the recommendation until persist succeeds |
-| **Scan-only shell** | Scan node selected; no draft and no persisted CP on backend |
+| **Composition / editor state** | In-progress CP configuration — **client-only** (memory / sessionStorage NB2); not a server resource |
+| **Persisted CP** | Currently **recommended** policy for owner+address (wallet-signed at persist; W1) |
+| **Scan-only shell** | Scan selected; no active composition and no persisted CP |
 
-A scan may have at most one persisted CP and at most one draft; both may coexist (dual-branch graph, State 7).
+A wallet may have at most **one** active persisted CP (W1). There is **no** dual-branch “replacement draft” server resource.
 
 #### Entry modes
 
 | Mode | Behavior |
 | --- | --- |
-| **Cold start** | Scan picker (State 2); **no** scan pre-selected (**US15**) |
-| **Session resume** | Last active scan and graph state restored when returning without `?scanId=` (**US13**) |
-| **Discovery deep link** | `?scanId=<uuid>` from **Open CPM** on wallet scan rows (**US12**) |
-| **In-page scan change** | Click scan node → modal; hydrates draft/persisted CP for newly selected scan (**US14**, **US15**) |
+| **Cold start** | Scan picker; **no** scan pre-selected |
+| **Session resume** | Last active scan + local editor restore when returning without `?scanId=` (NB2) |
+| **Discovery deep link** | `?scanId=<uuid>` from **Open CPM** on wallet scan rows |
+| **In-page scan change** | Switch scan; warn if unsaved local composition at risk; re-anchor W2 |
 
 `?scanId=` in the URL overrides session resume.
 
-#### User stories summary
-
-| ID | Intent |
-| --- | --- |
-| **US1** | Empty state when no EOA scan — CTA to Discovery; no catalog |
-| **US2** | Select eligible EOA scan; first graph node + edge; hydrate draft/persisted CP when backend has them |
-| **US3** | First edge opens CP catalog; compatible policies selectable; selecting creates/updates draft |
-| **US4** | Change draft CP freely; confirm when draft has meaningful progress; persisted CP unchanged |
-| **US5** | Resume platform draft on scan select, session resume, or deep link |
-| **US6** | View persisted CP read-only branch; clearly marked **recommended** |
-| **US7** | Prepare replacement draft via first edge; persisted CP unchanged until successful persist |
-| **US8** | **Persist** new draft in one action — implicit local structural check, then wallet sign + backend persist (**CPM-UI-8**) |
-| **US9** | **Persist** replacement draft — local validation → confirm → wallet → persist; prior persisted CP unchanged on failure |
-| **US10** | Delete draft / replacement draft with confirmation; persisted CP unchanged |
-| **US11** | Delete persisted CP with confirmation (no wallet signature); replacement draft unchanged if any |
-| **US12** | **Open CPM** from Discovery wallet scan list → `/crypto-policy-management?scanId=…` |
-| **US13** | Same-tab session resume of last CPM workspace |
-| **US14** | Change scan from scan-node modal; warn on unsaved platform draft at risk |
-| **US15** | Graph shell matches scan CP state (scan-only vs draft vs persisted vs dual-branch) |
-| **US16** | Policy node click → details/parameter modal (no legacy side column) |
-| **US17** | Single full-width graph column; legacy right workspace removed |
-| **US18** | **CPM Version** tile on Platform Status (see above) |
-| **US19** | Warn before leaving CPM with unsaved platform draft at risk (`beforeunload` + in-app navigation) |
-| **US20** | CP branch header node (**Draft** / **Persisted** / **Replacement Draft**) before topology |
-| **US21** | Structural validation runs implicitly on **Persist** — no separate **Validate** button |
-
-#### Persist UX (US8, US9, US21 — CPM-UI-8)
-
-The graph draft panel exposes a single primary action: **Persist** (replacement: e.g. **Replace persisted policy**).
+#### Persist UX
 
 1. User clicks **Persist**.
-2. **Local structural validation** runs (`policyDraftValidation` / `usePolicyValidation`) — not a CPM backend validate API.
-3. On failure: show validation issues; **do not** open MetaMask or call `wallet-challenges` / `POST …/drafts/{id}/persist`.
-4. On success: save backend draft if needed → `POST …/wallet-challenges` → `personal_sign` → `POST …/drafts/{draft_id}/persist` ([CP-PERSIST V1](./docs/security/cp-persist-v1.md)).
-5. Replacement path adds an explicit confirmation dialog **after** local validation succeeds and **before** wallet signature.
+2. **Local structural validation** runs — not a CPM backend validate API.
+3. On failure: show validation issues; **do not** open MetaMask or call `wallet-challenges` / `POST /policies`.
+4. On success: `POST …/wallet-challenges` → `personal_sign` → **`POST …/policies`** ([CP-PERSIST](./docs/security/cp-persist-v1.md)).
+5. If **409** / existing policy: reconcile via GET + `payload_sha256`; replace via **NB1** (DELETE then new persist).
 
-#### Graph states (reference)
+#### Historical US1–US21 note
 
-| State | Situation |
-| --- | --- |
-| 1 | No EOA scans |
-| 2 | Scan picker (cold start) |
-| 3 | Scan selected; scan-only shell |
-| 4 | CP catalog open (first edge) |
-| 5 | Draft branch visible |
-| 6 | Persisted CP read-only branch |
-| 7 | Persisted + replacement draft (dual branch) |
+Earlier CPM-UI user stories assumed **platform drafts**, orphan **rebind**, and replacement-draft dual-branch. Those product surfaces are **removed**. Treat draft-centric US wording as **superseded**; formal IMM/TODO closure is **RD-P14**. Current product intent: explore (W2) → compose locally (NB2) → signed persist → policy-only durability.
 
 #### Out of scope (CPM UI V1)
 
-On-chain remediation lifecycle, TLS as CPM target, automated persist without user action, historical policy browsing, separate backend **validate** route for drafts.
+On-chain remediation lifecycle, TLS as CPM target, automated persist without user action, historical policy browsing, separate backend **validate** route, server draft CRUD.
 
-**Maintainer spec:** [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) · immutability UX: [`IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md)
+**Maintainer spec:** [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) · immutability UX: [`IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/blob/main/IMMUTABILITE.md) (amend RD-P14)
 
 ---
 
@@ -549,10 +508,10 @@ Wire event: `cafe.discovery.wallet.observed` v0.1 — see [03-cafe-developer-gui
 2. Load detail for selected `scan_id`.
 3. Select Crypto Policy from catalogue: `GET …/crypto-policies`.
 4. Explore: `POST …/policies/decisions/explore` with `scan_id`, `crypto_policy_id`, `policy_context`.
-5. Validate user constraints in UI (couche B indicative); save platform draft: `POST …/drafts` with `user_constraints`.
-6. Persist (EOA, CP-PERSIST V1): `POST …/wallet-challenges` → EIP-191 sign → `POST …/drafts/{draft_id}/persist` with `signed_message` + `signature` — not legacy `POST …/policies` without proof.
+5. Validate user constraints in UI (couche B indicative); keep composition locally (NB2) — **no** `POST …/drafts`.
+6. Persist (EOA): `POST …/wallet-challenges` → EIP-191 sign → **`POST …/policies`** with `signed_message` + `signature` + closed payload.
 
-See [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md) and CPM UI persist flow (**US8**, **US21**).
+See [CP-PERSIST runbook](./docs/security/cp-persist-v1.md) and CPM UI persist flow above.
 
 ### Delete scan protected by policy (W3 / W4)
 
@@ -563,7 +522,7 @@ See [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md) and CPM UI persist
 
 ### Rescan after failure (W8 + W1)
 
-1. Newest scan `failed`; no policy/draft → `POST …/scan` accepted.
+1. Newest scan `failed`; no policy → `POST …/scan` accepted.
 2. New `scan_id` allocated; CPM may still return `400` until newest is `completed` (**W7**).
 
 ### Reject CPM on TLS scan
