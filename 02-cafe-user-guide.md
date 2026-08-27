@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.8.0
+  - Date: August 27th, 2026
+  - Comments: Align CPM UX with ADR_20260824 — no server draft / Save draft / rebind; local composition (NB2); W2 scan anchoring; signed persist + NB1 replace. See [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) and [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
 - v0.7.0
   - Date: August 22nd, 2026
   - Comments: Rewrite **Crypto Policy Management** for the two-layer model (ADR amendement): select Crypto Policy from catalogue → explore **scan-compatible** providers → validate **user constraints** explicitly → persist with `user_constraints`. No FE hard-coded Nicetry defaults; `key_rotation` lives in the constraints panel (not on explore re-request). See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
@@ -357,13 +360,13 @@ On first visit, you pick a scan from the **scan picker** (no scan is pre-selecte
 
 After you select a scan and a Crypto Policy, the page runs explore and shows **scan-compatible** providers (or a rejection banner if none apply).
 
-**Change scan:** use the scan picker to switch. If you have **unsaved draft edits** not yet saved to the server, you are asked to confirm before switching.
+**Change scan:** use the scan picker to switch. CPM anchors on the **latest completed** scan for the address (**W2**). If you have **unsaved editor edits** in this session, you are asked to confirm before switching. Composition is **local** (sessionStorage) — there is no server draft to save.
 
 ### Opening CPM from Discovery
 
-On **Discovery → Wallet scan**, each eligible row may show **Open CPM** (label may reflect status: no policy, resume draft, view policy). This opens CPM with that scan pre-selected (`?scanId=...`).
+On **Discovery → Wallet scan**, each eligible row may show **Open CPM** (label may reflect status: no policy, resume editing, view policy). This opens CPM with that scan pre-selected (`?scanId=...`). Prefer opening the **latest completed** scan.
 
-When you leave CPM and return **in the same browser tab** without a deep link, the page restores your **last active scan** and state when possible.
+When you leave CPM and return **in the same browser tab** without a deep link, the page may restore your **last active scan** and **local editor state** for that `scan_id` (NB2 sessionStorage) when it is still W2.
 
 ### Choosing a scan-compatible provider
 
@@ -375,9 +378,9 @@ When you leave CPM and return **in the same browser tab** without a deep link, t
    - **Posture** — `required_posture` to `resulting_posture` bandeau
    - **Provider maturity** and **claim status** (see below)
 
-You can **change the draft candidate** anytime. If your draft already contains meaningful work, you must confirm before replacing it. Changing the draft **never** modifies a **persisted (recommended)** policy.
+You can **change the candidate** anytime. If your composition already contains meaningful work, you must confirm before replacing it. Changing the composition **never** modifies a **persisted (recommended)** policy until you successfully persist.
 
-When a **persisted CP** already exists, selecting a new candidate creates a **replacement draft** while the current recommendation stays visible as read-only.
+When a **persisted CP** already exists, you prepare a **new composition** while the current recommendation stays visible as read-only. Replacing it requires **NB1**: delete the persisted policy (confirm), then persist a new signed policy.
 
 ### Validating your constraints (couche B)
 
@@ -417,25 +420,25 @@ Some scan-compatible candidates carry **soft findings** that are not blocking fo
 
 A checklist of soft findings is presented before the wallet signature step. You must check each item to confirm you understand the operational constraints.
 
-### Saving and persisting
+### Composition and persisting
 
-**Save draft** stores your candidate selection and validated constraints on the platform (recoverable on return). It does **not** make the policy recommended.
+There is **no Save draft** on the server. Your in-progress composition lives in the page and may be restored from **sessionStorage** for the same `scan_id` in the same browser session (**NB2**). It does **not** create a platform resource.
 
-**Persist** makes your draft the **recommended** policy for the scan. Persist sends your validated **`user_constraints`** with the Crypto Policy payload; CPM rejoue couche A+B:
+**Persist** makes your composition the **recommended** policy for the wallet (W1: at most one active policy per owner+address). Persist sends your validated **`user_constraints`** with the Crypto Policy payload; CPM rejoue couche A+B:
 
-1. Click **Persist** (or **Replace persisted policy** when replacing).
-2. The app runs a **local structural check** on the draft (including that constraints were validated). If issues are found, they are listed and **no wallet signature** is requested.
+1. Click **Persist**.
+2. The app runs a **local structural check** (including that constraints were validated). If issues are found, they are listed and **no wallet signature** is requested.
 3. If soft findings are present, you must **accept each one** in the checklist before proceeding.
-4. If the check passes and soft findings are accepted, you sign with your **EOA wallet** (MetaMask or injected provider) to authorize persistence.
-5. For **replacement**, you also confirm which policy replaces which before signing.
+4. If the check passes and soft findings are accepted, you sign with your **EOA wallet** (MetaMask or injected provider) to authorize persistence (`wallet-challenges` → `personal_sign` → signed `POST /policies`).
+5. If a policy already exists (**409**), the UI shows the existing recommendation and compares `payload_sha256`. To replace: **NB1** — confirm **Delete** of the persisted CP (no wallet signature), then compose and persist again on the current W2 scan.
 
 If CPM rejects your constraints at persist, you see an incompatibility error — adjust constraints or choose another scan-compatible provider and try again.
 
-Deleting a **draft** or **persisted CP** always requires **confirmation**. Deleting a persisted CP does **not** require a wallet signature. Deleting a draft does not remove a persisted recommendation, and vice versa.
+Deleting a **persisted CP** always requires **confirmation** and does **not** require a wallet signature.
 
 ### Leaving the page with unsaved work
 
-If you edited a draft but have **not** saved it to the server, navigating away from CPM (another page, sign-out, or closing the tab) shows a warning with options to **Stay**, **Leave without saving**, or **Save draft** (when allowed). Saved server drafts do not trigger this warning -- you can resume them later.
+If you edited a composition that has **not** been persisted, navigating away from CPM may show a warning (**Stay** / **Leave**). Local sessionStorage may still restore the editor when you return for the same W2 `scan_id`.
 
 ### Explore without a scan-compatible provider
 
@@ -443,9 +446,10 @@ If no provider is scan-compatible for your scan and Crypto Policy (for example c
 
 ### Related documentation
 
-- Product rules and user stories **US1-US21**: [functional specifications -- CPM UI](./functional-specifications.md#cpm-user-interface--graph-workspace-us1us21)
+- Product rules and CPM UI: [functional specifications -- CPM UI](./functional-specifications.md#cpm-user-interface--composition-workspace)
 - Capability Provider model: [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md)
-- Wallet signature at persist: [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md)
+- Remove CP drafts: [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)
+- Wallet signature at persist: [CP-PERSIST runbook](./docs/security/cp-persist-v1.md)
 ## Platform Status
 
 The Platform Status page is under **Platform → Status** (`/platform/status`). It shows whether the platform is operational and which service versions are deployed.

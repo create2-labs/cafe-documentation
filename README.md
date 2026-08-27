@@ -29,10 +29,11 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Architecture
 
-- [CPM — Discovery v1 to policy flow](./docs/architecture/cpm-v1-flow.md) — What Option A is (post-V1 real scan context via Discovery); scan → catalogue CP → explore (couche A) → user constraints (couche B) → persist; **two-layer** Capability Provider model; links to [CPM design workplan](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md) and maintainer contracts.
+- [CPM — Discovery v1 to policy flow](./docs/architecture/cpm-v1-flow.md) — Option A: scan → catalogue CP → explore (couche A, W2) → local composition (NB2) → signed persist; **no server drafts**; links ADR_20260824 + OpenAPI.
 - [CAFE MBSE / SysML Modelio project](./docs/architecture/cafe-mbse-sysml-modelio-project.md) — Step-by-step project plan to build a SysML/MBSE model of CAFE for Modelio (**out of scope / not started** for the Capability Provider amendement train — see ADR PR plan). From system context and logical architecture to behavior flows, state machines, and traceability.
 - [CPM UI specifications (`cafe-frontend/CPM-specs-ui.md`)](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) — Normative CPM page user stories **US1–US21** and delivery epics **CPM-UI-1…8** (solution profile view, scénario A).
 - [ADR — Capability Provider abstraction (ADR_20260803)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) — ADR governing the Capability Provider model: two-layer explore/persist, `ProviderManifest`, `SolutionProfile`, posture matching, Nicetry pilote.
+- [ADR — Remove CP drafts (ADR_20260824)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) — No `/drafts*`; signed `POST /policies`; W2; NB1/NB2; [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts_PR_PLAN.md).
 - [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service README covering the provider model, env vars (`CPM_CRYPTO_POLICY_PATHS`, `CPM_PROVIDER_MANIFEST_PATHS`), explore v0.2, persist `user_constraints`, catalogue/runtime signals.
 
 ### API QA
@@ -41,7 +42,8 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Security and Operations
 
-- [CPM Auth contract](./docs/security/cpm-contract.md) — Authenticated CPM behavior, scan authorization, owner-scoped persistence, error contract (explore legacy **400**, `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`, assessment v0.2)
+- [CPM Auth contract](./docs/security/cpm-contract.md) — Authenticated CPM behavior, scan authorization, owner-scoped **policies** (no `/drafts*`), error contract (explore legacy **400**, W2 / persist codes, assessment v0.2)
+- [CP-PERSIST (no drafts)](./docs/security/cp-persist-v1.md) — Signed `POST /policies`, `payload_sha256`, W2, NB1/NB2; links ADR + OpenAPI + `CP_PERSIST.md`
 - [CPM explore — no scan-compatible provider (observability & admin diagnosis)](./docs/operations/cpm-explore-no-candidate-observability.md) — **REQ9** / **IMM-OPS-1…2**: runtime signal `runtime.no_scan_compatible`, structured logs, Prometheus/Grafana, `curl` admin workflow (complements user-facing **REQ8** in the SPA; couche B is a separate signal)
 
 ## About CAFE

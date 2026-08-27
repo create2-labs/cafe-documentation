@@ -4,6 +4,9 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.17.0
+  - Date: August 27th, 2026
+  - Comments: Align CP persist with ADR_20260824 (no drafts): normative engagement is signed `POST /api/cpm/v1/policies` + `payload_sha256`; `/drafts*` removed; W2 on explore/challenge/persist; NB1/NB2. See [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) and [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
 - v0.16.0
   - Date: August 22nd, 2026
   - Comments: Align with ADR amendement two-layer model: catalogue `GET /crypto-policies` + `/providers` (retired `/policies/templates|instances|catalog`); explore v0.2 input `scan_id?` + `crypto_policy_id` + `policy_context` → `scan_compatible_providers` (legacy explore → **400**); persist `cafe.crypto_policy.v0.2` with `crypto_policy_id` + `user_constraints` (CPM rejeu A+B; `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`); assessment body `scan_id` + `crypto_policy_id` only. See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
@@ -218,17 +221,15 @@ Version strings come from the image build (`APP_VERSION` / Git tag). They are **
 | Providers catalogue | `GET /api/cpm/v1/providers` | Bearer |
 | Provider by id | `GET /api/cpm/v1/providers/{provider_id}` | Bearer |
 | Explore decision (v0.2) | `POST /api/cpm/v1/policies/decisions/explore` | Bearer |
-| List or read policies | `GET /api/cpm/v1/policies` | Bearer |
-| Wallet challenge (EOA persist prep) | `POST /api/cpm/v1/wallet-challenges` | Bearer |
-| Persist draft (EOA — normative) | `POST /api/cpm/v1/drafts/{draft_id}/persist` | Bearer + signed authorization |
-| Legacy policy upsert | `POST /api/cpm/v1/policies` | Bearer — **not** normative EOA persist; missing proof → **403** |
-| Delete policy | `DELETE /api/cpm/v1/policies?id=...` | Bearer |
-| Drafts | `/api/cpm/v1/drafts` | Bearer |
+| Wallet challenge (EOA persist prep) | `POST /api/cpm/v1/wallet-challenges` | Bearer; W2; computes `payload_sha256`; stores nothing |
+| Persist policy (EOA — normative) | `POST /api/cpm/v1/policies` | Bearer + signed body (`payload` + `signed_message` + `signature`); W2 |
+| List / read policies | `GET /api/cpm/v1/policies` | Bearer; exposes `payload_sha256` |
+| Delete policy (NB1) | `DELETE /api/cpm/v1/policies?id=...` | Bearer (JWT only) |
 | Async policy assessment request | `POST /api/cpm/v1/policies/assessment/request` | Bearer |
 | Health | `GET /healthz` direct, `GET /api/cpm/healthz` at edge | Public |
 | Deployed version | `GET /version` direct, `GET /api/cpm/version` at edge | Public |
 
-Retired catalogue routes (do not use): `GET /api/cpm/v1/policies/templates`, `/policies/instances`, `/policies/catalog`.
+Retired / removed routes (do not use): `GET /api/cpm/v1/policies/templates`, `/policies/instances`, `/policies/catalog`; **all** `/api/cpm/v1/drafts*` (ADR_20260824 — no shim).
 
 ## Discovery Workflows
 
@@ -438,7 +439,9 @@ Explore may return **200** with empty `scan_compatible_providers` and populated 
 
 ### Persist payload — `cafe.crypto_policy.v0.2`
 
-The draft payload sent to `POST /api/cpm/v1/drafts` and persisted via `POST /api/cpm/v1/drafts/{draft_id}/persist` must be **schema version `cafe.crypto_policy.v0.2`** with `crypto_policy_id`, `user_constraints`, and `accepted_provider_snapshot`.
+Normative engagement is **`POST /api/cpm/v1/policies`** (signed). There is **no** `/drafts*` path. The closed hashed `payload` must be **schema version `cafe.crypto_policy.v0.2`** with `crypto_policy_id`, `user_constraints`, `accepted_provider_snapshot`, and top-level `accepted_findings`. See [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
+
+Flow: compose locally (NB2) → `POST /wallet-challenges` → EIP-191 sign → `POST /policies`. Explore / challenge / persist require **W2** (`422 SCAN_NOT_LATEST` / `503 DISCOVERY_UNAVAILABLE`). Replace = **NB1** DELETE then new signed persist. Retry / conflict → **409** `POLICY_ALREADY_EXISTS` — reconcile via `GET /policies` + `payload_sha256`.
 
 **Minimum required fields (v0.2):**
 
@@ -473,7 +476,8 @@ The draft payload sent to `POST /api/cpm/v1/drafts` and persisted via `POST /api
 - `user_constraints` is required; CPM **rejoue couche A then B**. Couche B failure → **400** `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` (runtime signal `adr_signal=runtime.no_provider_after_user_constraints`).
 - Provider refs in `accepted_provider_snapshot` must be **pinned** — `unpinned_pending_fixture` is rejected. Nicetry fixture refs are pinned (**CPM-P7** done).
 - Soft findings listed in `accepted_findings` must match those returned by explore for that candidate.
-- Wallet proof (signed message from `wallet-challenges`) is still required as in V1.
+- Wallet proof (signed message from `wallet-challenges`) is required on `POST /policies`.
+- Client-supplied `payload_sha256` on write is **ignored** (server authority).
 
 ### Request async policy assessment
 
@@ -531,7 +535,8 @@ Use this checklist before opening or merging API coherency documentation changes
 - **Explore v0.2:** input `crypto_policy_id` + `policy_context` (+ optional `scan_id`); output `scan_compatible_providers`; legacy explore → **400**.
 - **Capability Providers:** explore response carries `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, `suggested_user_constraints` — no `graphEdges`/`nodeInstances`.
 - **`claim_status: "declared"`** is documented as a provider declaration, not an audited or executed proof.
-- **Persist v0.2:** payload uses `schema_version: "cafe.crypto_policy.v0.2"` with `crypto_policy_id`, `user_constraints`, `accepted_provider_snapshot`; CPM rejeu A+B; `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` on couche B KO; `unpinned_pending_fixture` refs rejected (Nicetry refs pinned).
+- **Persist (no drafts):** signed `POST /policies` with `schema_version: "cafe.crypto_policy.v0.2"`, closed hashed fields + `payload_sha256` (server); CPM rejeu A+B; `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` on couche B KO; `unpinned_pending_fixture` refs rejected (Nicetry refs pinned); W2; NB1/NB2.
+- **Removed:** `/api/cpm/v1/drafts*` — do not document as live.
 - **Vocabulary:** scan-compatible / user-qualified / persistable; avoid `ranked_candidates` as normative term.
 
 ## Additional Resources

@@ -31,10 +31,10 @@ Both version endpoints return `{"version":"<deploy-tag>"}` with no auth.
 ## CPM Checks
 
 - Crypto Policies and providers catalogue examples use `GET /api/cpm/v1/crypto-policies` and `GET /api/cpm/v1/providers` (not retired `/policies/templates|instances|catalog`).
-- Drafts, policies, and explore examples use `/api/cpm/v1`.
-- `POST /api/cpm/v1/policies/decisions/explore` is described as synchronous couche A preview (v0.2: `crypto_policy_id` + `policy_context`) and non-persistent; output `scan_compatible_providers`; legacy explore → **400**.
+- Policies and explore examples use `/api/cpm/v1` — **no** live `/drafts*` (ADR_20260824).
+- `POST /api/cpm/v1/policies/decisions/explore` is described as synchronous couche A preview (v0.2: `crypto_policy_id` + `policy_context`) and non-persistent; output `scan_compatible_providers`; legacy explore → **400**; W2 when scan-bound.
 - Explore may return HTTP **200** with empty `scan_compatible_providers` and `rejected_candidates` (runtime signal `runtime.no_scan_compatible`); ops runbook and IMM-OPS observability are documented in [CPM explore observability](../operations/cpm-explore-no-candidate-observability.md).
-- Persist docs mention `crypto_policy_id` + `user_constraints` and `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` for couche B KO.
+- Persist docs describe signed **`POST /api/cpm/v1/policies`** (challenge → sign → persist), `payload_sha256`, `crypto_policy_id` + `user_constraints`, and `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` for couche B KO. See [CP-PERSIST](../security/cp-persist-v1.md).
 - `GET /metrics` on CPM is documented as public application metrics (**IMM-OPS-1**).
 - CPM `GET /version` (direct) and `GET /api/cpm/version` (edge) are documented as public deploy version (**CPM-OPS-3**); same JSON contract as Discovery `/api/version`.
 - Platform Status docs mention Frontend, Discovery, and CPM version tiles (**CPM-UI-7A**).
