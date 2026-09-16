@@ -7,7 +7,7 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 - v0.9.0
   - Date: September 16th, 2026
-  - Comments: Reshape **Crypto Policy Management** for the three-tab shell (Introduction / Dashboard / Crypto Policy Mgt); jargon-free concepts (latest completed scan, stale vs latest scan, catalogue match, hard constraints); stable deep-link anchors for SPA Learn more targets. Internal nicknames (W2, couche A/B) are reserved for operator/developer notes — not the main task path.
+  - Comments: Reshape **Crypto Policy Management** for the three-tab shell (Introduction / Dashboard / Crypto Policy Mgt); jargon-free concepts (latest completed scan, stale vs latest scan, catalogue match, hard constraints); stable deep-link anchors for SPA Learn more targets; representative UI screenshots under `images/` for the main gate cases. Internal nicknames (W2, couche A/B) are reserved for operator/developer notes — not the main task path.
 - v0.8.0
   - Date: August 27th, 2026
   - Comments: Align CPM UX with ADR_20260824 — no server draft / Save draft / rebind; local composition (NB2); W2 scan anchoring; signed persist + NB1 replace. See [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) and [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
@@ -485,7 +485,7 @@ A checklist of soft findings is presented before the wallet signature step. You 
 
 ### Situations and errors
 
-Each heading below is a stable deep-link target for **Learn more** links in the SPA.
+Each heading below is a stable deep-link target for **Learn more** links in the SPA. Screenshots show **representative gates** from Crypto Policy Mgt (dark overlay cards and the empty Scans column). Badge labels in the current UI may still use internal nicknames; the titles and guidance below are the user-facing vocabulary.
 
 <a id="cpm-error-scan-not-latest"></a>
 
@@ -494,6 +494,10 @@ Each heading below is a stable deep-link target for **Learn more** links in the 
 **UI / API:** selected scan ≠ latest completed for the address (`SCAN_NOT_LATEST`).
 
 CAFE only allows composition, explore, and persist on the **latest completed** wallet scan for that address. Older completed scans stay visible for history, but selecting one blocks the downstream workspace until you switch.
+
+![Overlay when the selected scan is not the latest completed scan for the address (`SCAN_NOT_LATEST`)](./images/w2.png)
+
+**Representative case (screenshot):** the user selected an older completed scan while a newer completed scan exists for the same wallet. The overlay explains that Crypto Policy work is bound to the latest completed scan, shows machine code `SCAN_NOT_LATEST`, lists **observed chains** from that scan (here `1` and `11155111`), and tells you to switch to the latest completed scan — or run a new completed scan so the latest becomes the one you want.
 
 **What to do:**
 
@@ -509,9 +513,13 @@ CAFE only allows composition, explore, and persist on the **latest completed** w
 
 This means the catalogue does not yet cover your wallet’s configuration for the selected Crypto Policy. It is **not** a broken scan.
 
+![Overlay when no catalogue Crypto Policy can use the selected scan](./images/couchea.png)
+
+**Representative case (screenshot):** catalogue matching fails **before** your intent constraints matter. The overlay title is “No Crypto Policy can use this scan”. The detail line explains why (here: no observed chain is deployable for capabilities such as `deploy`, `sign_userop`, `rotate_signer`). **Observed chains** in the example are `1` and `80002`. Remediation is to rescan on a chain set the catalogue supports, or wait until coverage is added — not to relax Your intent.
+
 Common causes include chain support mismatch, posture incompatibility, or a hard provider constraint. Platform operators monitor these cases as a runtime signal separately from constraint mismatches at persist.
 
-**What to do:** try another catalogue Crypto Policy if available, or wait for catalogue coverage to expand. See also [Explore rejection codes](#cpm-error-explore-rejection).
+**What to do:** try another catalogue Crypto Policy if available, rescan on supported chains, or wait for catalogue coverage to expand. See also [Explore rejection codes](#cpm-error-explore-rejection).
 
 <a id="cpm-error-constraints-exclude-all"></a>
 
@@ -521,6 +529,10 @@ Common causes include chain support mismatch, posture incompatibility, or a hard
 
 This is different from “no policy for scan”: catalogue matching succeeded, but **your** hard constraints (allow new wallet, address continuity, key rotation) leave no user-qualified provider.
 
+![Overlay when hard constraints exclude every Crypto Policy that matched the scan](./images/coucheb.png)
+
+**Representative case (screenshot):** the scan **has** catalogue coverage, but none of the Crypto Policies survive the current hard constraints. The status chip reads `Incompatible with current hard constraints`. **Observed chains** in the example are `11155111` only. The overlay suggests allowing a new wallet/account or relaxing address continuity and key rotation; changing constraints updates the catalogue filter without leaving the page.
+
 **What to do:** relax one or more constraints in **Your intent**, re-validate, and retry. At persist, CPM still re-checks the same rules on the server.
 
 <a id="cpm-error-explore-rejection"></a>
@@ -529,7 +541,7 @@ This is different from “no policy for scan”: catalogue matching succeeded, b
 
 When explore returns no usable provider, CPM may show an **explanation banner** with rejection reasons and machine codes (for example `incompatible.provider.chain`, `incompatible.posture`).
 
-Use the codes when talking to support or operators. They point at provider, chain, or posture coverage — not at a failed Discovery scan. Soft vs hard rejection semantics are summarised with the catalogue-matching concepts above.
+Use the codes when talking to support or operators. They point at provider, chain, or posture coverage — not at a failed Discovery scan. Soft vs hard rejection semantics are summarised with the catalogue-matching concepts above. The “no catalogue match” overlay above is the full-page gate form of the same family of situations.
 
 <a id="cpm-error-persist-or-session"></a>
 
@@ -548,6 +560,10 @@ Persist and related auth steps can fail when your session expired, a wallet chal
 #### No eligible wallet scan
 
 If you have no eligible completed EOA wallet scan, CPM shows an **empty state** with a link to **Discovery → Wallet scan**.
+
+![Empty Scans column when no EOA wallet scan is available](./images/noscan.png)
+
+**Representative case (screenshot):** the **Scans** picker shows “Select a scan…” with no options. The dashed empty state says no EOA wallet scan is available and offers **Go to wallet scan** (Discovery). Until at least one completed EOA wallet scan exists, Crypto Policy Mgt cannot start composition.
 
 **What to do:** run a wallet scan in Discovery, wait until it completes successfully, then return to CPM (Introduction or Crypto Policy Mgt).
 
@@ -568,7 +584,7 @@ CAFE allows **at most one** active recommended Crypto Policy per owner + wallet 
 - Remove CP drafts: [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)
 - Wallet signature at persist: [CP-PERSIST runbook](./docs/security/cp-persist-v1.md)
 
-> **For operators / developers:** internal nicknames such as W2 (latest completed scan probe) and couche A/B (catalogue match vs hard constraints) appear in ADRs and developer guides. The user-facing vocabulary above is authoritative for the SPA and this guide.
+> **For operators / developers:** internal nicknames such as W2 (latest completed scan probe) and couche A/B (catalogue match vs hard constraints) appear in ADRs, developer guides, and some current UI badges on the screenshots above. The user-facing vocabulary in this chapter is authoritative for the SPA Learn more targets and for the copy pass that follows.
 
 ## Platform Status
 
