@@ -905,6 +905,6 @@ For additional help:
 
 ### Scan Types
 
-- **Wallet Scan** — Analyzes Ethereum wallet quantum vulnerability
-- **TLS Scan** — Analyzes TLS endpoint post-quantum readiness
+- **Wallet Scan** — First step of crypto agility: observes Ethereum wallet posture (risk score + NIST). Does not choose a Crypto Policy.
+- **TLS Scan** — Informative only: analyzes TLS endpoint PQC readiness. CAFE does not provide remediation for TLS endpoints.
 
