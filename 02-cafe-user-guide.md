@@ -5,9 +5,12 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.10.0
+  - Date: September 17th, 2026
+  - Comments: Four-tab CPM Navigation (**Introduction** / **CPM catalog** / **Dashboard** / **Crypto Policy Mgt**); Discovery and CPM Introduction narratives (phase 1 observe vs phase 2 compose & persist; TLS informative only / no TLS remediation; CPM matches Crypto Policies it knows); US spelling **catalog**; new anchors `#cpm-catalog` and `#cpm-dashboard-scans`. Existing error anchors unchanged.
 - v0.9.0
   - Date: September 16th, 2026
-  - Comments: Reshape **Crypto Policy Management** for the three-tab shell (Introduction / Dashboard / Crypto Policy Mgt); jargon-free concepts (latest completed scan, stale vs latest scan, catalogue match, hard constraints); stable deep-link anchors for SPA Learn more targets; representative UI screenshots under `images/` for the main gate cases. Internal nicknames (W2, couche A/B) are reserved for operator/developer notes — not the main task path.
+  - Comments: Reshape **Crypto Policy Management** for the three-tab shell (Introduction / Dashboard / Crypto Policy Mgt); jargon-free concepts (latest completed scan, stale vs latest scan, catalog match, hard constraints); stable deep-link anchors for SPA Learn more targets; representative UI screenshots under `images/` for the main gate cases. Internal nicknames (W2, couche A/B) are reserved for operator/developer notes — not the main task path.
 - v0.8.0
   - Date: August 27th, 2026
   - Comments: Align CPM UX with ADR_20260824 — no server draft / Save draft / rebind; local composition (NB2); W2 scan anchoring; signed persist + NB1 replace. See [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) and [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
@@ -69,14 +72,15 @@ The main navigation menu provides access to:
 
 - **Home** — Landing page with links to Discovery, Crypto Policy Management, and Remediation
 - **Discovery** — Tabbed section with:
-  - **Introduction** — Overview of Discovery (wallet and TLS exposure)
+  - **Introduction** — Phase 1 of crypto agility: observe wallets and TLS endpoints (read-only). Wallet scan interprets risk score and NIST level only — it does **not** choose a Crypto Policy. TLS scan is informative only; CAFE does not provide remediation for TLS endpoints.
   - **Dashboard** — Overview of your scans and security statistics
   - **Wallet scan** — View and manage wallet security scans
-  - **TLS scan** — View and manage TLS endpoint security scans
+  - **TLS scan** — View and manage TLS endpoint security scans (informative only)
 - **Crypto Policy Management** — Tabbed section with:
-  - **Introduction** — What a Crypto Policy is and prerequisites (completed EOA wallet scan)
-  - **Dashboard** — Inventory of Crypto Policies you already own (including stale vs latest scan)
-  - **Crypto Policy Mgt** — Compose, explore catalogue matches, and persist a recommended policy
+  - **Introduction** — Phase 2 of crypto agility: compose and persist a Crypto Policy from a completed Discovery wallet scan; how CPM matches scans to Crypto Policies it knows
+  - **CPM catalog** — Browse system-available Crypto Policies (not your persisted inventory)
+  - **Dashboard** — Your wallet scans with Crypto Policy status per scan (`persisted` / `candidate` / `N/A`)
+  - **Crypto Policy Mgt** — Compose, explore catalog matches, and persist a recommended policy
 - **Remediation** — Migration to post-quantum–resistant cryptography
 - **Platform** — Sub-pages: **Status** (health, versions), **Security** (token inspection, refresh)
 - **Networks (Chains)** — View supported blockchain networks
@@ -149,6 +153,10 @@ From the dashboard, you can:
 
 ## Wallet Scanning
 
+A **wallet scan** is the first necessary step of crypto agility in CAFE: Discovery **observes** wallet posture so you can later **compose and persist** a Crypto Policy in Crypto Policy Management.
+
+Discovery is **read-only** for wallets (blockchain explorers / on-chain data only). The only interpretation Discovery makes is the **risk score** and **NIST** security level. It does **not** conclude which Crypto Policy you should use — that match happens later in CPM.
+
 CAFE can scan Ethereum wallets to assess their quantum vulnerability by checking if the public key has been exposed on-chain.
 
 ### Starting a Wallet Scan
@@ -210,7 +218,9 @@ Clicking on a scan result shows detailed information:
 
 ## TLS Endpoint Scanning
 
-CAFE can scan TLS endpoints (HTTPS URLs) to assess their post-quantum cryptography readiness.
+A **TLS scan** analyses a TLS endpoint (for example RPC nodes, APIs, frontends). It checks TLS version, cipher suites, certificate algorithms, and Post Quantum Cryptography readiness so you can understand the **PQC maturity** of your endpoints and their resistance to the quantum threat.
+
+This scan is **informative only**. **CAFE does not provide remediation for TLS endpoints** and does not offer crypto agility for TLS. Use the results to inform endpoint choice; work with your endpoint providers if you need to improve TLS security.
 
 ### Starting a TLS Scan
 
@@ -333,15 +343,20 @@ Click on any scan result to view:
 
 ## Crypto Policy Management
 
-**Crypto Policy Management (CPM)** turns a **completed Discovery wallet scan** into a **Crypto Policy**: a signed binding between observed wallet posture, your hard constraints, and a catalogue solution profile.
+**Crypto Policy Management (CPM)** is the **second phase** of crypto agility. After Discovery has observed a wallet, CPM lets you **compose and persist** a **Crypto Policy**: a signed binding between observed wallet posture, your hard constraints, and a catalog solution profile — starting from the data of a completed Discovery wallet scan. **CPM does not modify Discovery scans.**
 
-CPM is organised like Discovery, with **three sticky tabs**:
+Composition and persist always use the **latest completed wallet scan** for that address (see [Latest completed wallet scan](#cpm-latest-completed-scan)). Older completed scans stay visible for history, but new Crypto Policy work must follow the latest completed one.
+
+CPM matches what the scan observed — wallet type, chains, and cryptographic posture — against the Crypto Policies it knows (the [CPM catalog](#cpm-catalog)). A Crypto Policy matches a scan when its required posture and provider coverage can cover that observed posture. If CPM finds no Crypto Policy that fits (for example the scan’s chains are outside what a known Crypto Policy can deploy), composition is not available for that scan: the scan itself is fine; CPM simply has no offering in its catalog for it. Separately, even when one or more Crypto Policies match the scan, your **hard constraints** (allow a new wallet, address continuity, key rotation) can still exclude every option — see [Matching a scan to the catalog](#cpm-scan-and-catalogue) and [Your constraints exclude every Crypto Policy](#cpm-error-constraints-exclude-all).
+
+CPM is organised like Discovery, with **four sticky tabs**:
 
 | Tab | Role |
 | --- | --- |
-| **Introduction** | What CPM is, what a Crypto Policy binds, and prerequisites |
-| **Dashboard** | Summary of **Crypto Policies you already own** (counts + table) |
-| **Crypto Policy Mgt** | Composition workspace: pick a scan → choose catalogue Crypto Policy → explore matches → validate constraints → persist |
+| **Introduction** | Phase 2 narrative: compose & persist, latest completed scan, how CPM matches scans to Crypto Policies it knows |
+| **CPM catalog** | Browse **system-available** Crypto Policies (list → detail). Not your persisted inventory — see [CPM catalog](#cpm-catalog) |
+| **Dashboard** | **Your wallet scans** with Crypto Policy status per scan (`persisted` / `candidate` / `N/A`) — see [Dashboard: scans and Crypto Policy status](#cpm-dashboard-scans) |
+| **Crypto Policy Mgt** | Composition workspace: pick a scan → set intent → choose a catalog Crypto Policy CPM matched → explore → persist |
 
 **Prerequisites:**
 
@@ -375,25 +390,27 @@ If you later complete a **new** wallet scan for the same address, that new scan 
 
 Typical consequences:
 
-- You can still **see** the policy on the **Dashboard** (inventory / audit).
+- The **Dashboard** still lists the older scan row (with persisted status and, optionally, a stale cue).
 - You **cannot** continue composition, explore, or persist against the old scan in **Crypto Policy Mgt** (UI gate; API code `SCAN_NOT_LATEST`).
 - To continue work on that wallet, switch to the **latest completed** scan (or run a new completed scan that becomes latest), then compose again if you need a new recommendation.
 
-The Dashboard tile **Stale vs latest scan** counts policies in this situation. The same explanation applies when you select an older scan in the Mgt scan picker while a newer completed scan exists — see [This scan is not the latest completed scan](#cpm-error-scan-not-latest).
+The same explanation applies when you select an older scan in the Mgt scan picker while a newer completed scan exists — see [This scan is not the latest completed scan](#cpm-error-scan-not-latest).
 
 <a id="cpm-scan-and-catalogue"></a>
 
-#### Matching a scan to the catalogue
+#### Matching a scan to the catalog
 
-After you select a wallet scan and a **catalogue Crypto Policy**, CAFE explores Capability Provider manifests and returns providers that **match this scan** (sometimes labelled **scan-compatible** in the UI).
+**CPM** matches what a wallet scan observed against the Crypto Policies **it knows** (the CPM catalog). Discovery does not perform this match and does not choose a Crypto Policy.
 
-Matching considers the scan’s observed posture, chain scope, and the Crypto Policy’s solution profile. CPM is authoritative: the UI does not invent catalogue coverage.
+After you select a wallet scan and a **catalog Crypto Policy**, CPM explores Capability Provider manifests and returns providers that **match this scan** (sometimes labelled **scan-compatible** in the UI).
+
+Matching considers the scan’s observed posture, chain scope, and the Crypto Policy’s solution profile. CPM is authoritative: the UI does not invent catalog coverage.
 
 | Term | Meaning |
 | --- | --- |
-| **Matches this scan** / **scan-compatible** | Provider passed catalogue matching for this scan × Crypto Policy × solution profile |
+| **Matches this scan** / **scan-compatible** | Provider passed catalog matching for this scan × Crypto Policy × solution profile |
 | **User-qualified** | Matches this scan **and** your validated hard constraints in the UI (indicative only) |
-| **Persistable** | Server re-check of catalogue match and hard constraints plus all persist gates succeeded |
+| **Persistable** | Server re-check of catalog match and hard constraints plus all persist gates succeeded |
 
 If nothing matches, see [No Crypto Policy matches this scan](#cpm-error-no-policy-for-scan) and [Explore rejection codes](#cpm-error-explore-rejection).
 
@@ -421,7 +438,7 @@ If your constraints exclude every candidate, see [Your constraints exclude every
 
 There is **no Save draft** on the server. Your in-progress composition lives in the page and may be restored from **sessionStorage** for the same `scan_id` in the same browser session. It does **not** create a platform resource.
 
-**Persist** makes your composition the **recommended** policy for the wallet (at most one active policy per owner + address). Persist sends your validated **`user_constraints`** with the Crypto Policy payload; CPM re-checks catalogue match and hard constraints:
+**Persist** makes your composition the **recommended** policy for the wallet (at most one active policy per owner + address). Persist sends your validated **`user_constraints`** with the Crypto Policy payload; CPM re-checks catalog match and hard constraints:
 
 1. Click **Persist**.
 2. The app runs a **local structural check** (including that constraints were validated). If issues are found, they are listed and **no wallet signature** is requested.
@@ -435,9 +452,46 @@ Deleting a **persisted** Crypto Policy always requires **confirmation** and does
 
 If you edited a composition that has **not** been persisted, navigating away may show a warning (**Stay** / **Leave**). Local sessionStorage may still restore the editor when you return for the same `scan_id`, provided that scan is still the latest completed one for the address.
 
+<a id="cpm-catalog"></a>
+
+### CPM catalog
+
+**CPM catalog** lists Crypto Policies **available in the system** — the catalog CPM knows — so you can browse what the platform can offer before (or while) composing in Crypto Policy Mgt.
+
+- **List** — id, name/label, version (and related catalog fields such as required posture when shown).
+- **Detail** — open a row for description and catalog metadata (Wallet Scan–style list → detail).
+- Catalog rows are **not** “Crypto Policies you own”. Persisted bindings appear via scan status on the [Dashboard](#cpm-dashboard-scans) and in Crypto Policy Mgt.
+
+Use **Crypto Policy Mgt** to compose and persist against a completed wallet scan.
+
+<a id="cpm-dashboard-scans"></a>
+
+### Dashboard: scans and Crypto Policy status
+
+The CPM **Dashboard** lists **your Discovery wallet scans** and the Crypto Policy status of each scan — including scans that match **no** catalog Crypto Policy.
+
+It is **not** a fixture inventory of catalog-looking policies presented as your owned Crypto Policies.
+
+| Column | Content |
+| --- | --- |
+| `scan_id` | Scan identifier |
+| `wallet_addr` | Target wallet address for that scan |
+| `CP_id` | Persisted policy id if any; else first matching catalog Crypto Policy id; else empty / `—` |
+| Status | `persisted` \| `candidate` \| `N/A` |
+
+**Status meaning:**
+
+| Status | Meaning |
+| --- | --- |
+| **persisted** | You have a signed Crypto Policy bound to this scan |
+| **candidate** | No persist yet; at least one catalog Crypto Policy matches this scan (first shown as `CP_id`) |
+| **N/A** | CPM finds no catalog Crypto Policy for this scan; opening the row explains why (see [No Crypto Policy matches this scan](#cpm-error-no-policy-for-scan)) |
+
+Optional summary counts (total / persisted / candidate / N/A) may appear; they do not replace the scan table.
+
 ### Crypto Policy Mgt workspace
 
-In **Crypto Policy Mgt**, pick a scan from the **scan picker** (none is pre-selected on first visit), then select a **Crypto Policy** from the catalogue (for example PQ account validation). There is **no** automatic default selection from Nicetry or the frontend.
+In **Crypto Policy Mgt**, pick a scan from the **scan picker** (none is pre-selected on first visit), then select a **Crypto Policy** from the catalog (for example PQ account validation). There is **no** automatic default selection from Nicetry or the frontend.
 
 After you select a scan and a Crypto Policy, the page runs explore and shows providers that match this scan (or a rejection banner if none apply).
 
@@ -474,7 +528,7 @@ Do not rely on `declared` alone as evidence of post-quantum security. CAFE prese
 
 #### Soft findings — accept before persist
 
-Some candidates that match this scan carry **soft findings** that are not blocking for catalogue matching but must be acknowledged before you can persist the policy:
+Some candidates that match this scan carry **soft findings** that are not blocking for catalog matching but must be acknowledged before you can persist the policy:
 
 | Finding | Meaning |
 | --- | --- |
@@ -503,23 +557,23 @@ CAFE only allows composition, explore, and persist on the **latest completed** w
 
 1. Switch the scan picker to the **latest completed** scan for the address, or run a new wallet scan in Discovery that completes successfully.
 2. Compose (or re-compose) on that scan if you need an updated recommendation.
-3. On the Dashboard, policies anchored to older scans appear under **Stale vs latest scan** — see [Stale vs latest scan](#cpm-stale-vs-latest-scan).
+3. On the Dashboard, older scans with a persisted Crypto Policy may show an optional **stale vs latest scan** cue — see [Stale vs latest scan](#cpm-stale-vs-latest-scan).
 
 <a id="cpm-error-no-policy-for-scan"></a>
 
 #### No Crypto Policy matches this scan
 
-**UI:** scan blocked / no catalogue match for this scan (explore may also reject every provider).
+**UI:** scan blocked / no catalog match for this scan (explore may also reject every provider). Dashboard status for that scan is **N/A**.
 
-This means the catalogue does not yet cover your wallet’s configuration for the selected Crypto Policy. It is **not** a broken scan.
+This means CPM finds no Crypto Policy in its catalog that covers your wallet’s configuration for this scan. It is **not** a broken scan.
 
-![Overlay when no catalogue Crypto Policy can use the selected scan](./images/couchea.png)
+![Overlay when no catalog Crypto Policy can use the selected scan](./images/couchea.png)
 
-**Representative case (screenshot):** catalogue matching fails **before** your intent constraints matter. The overlay title is “No Crypto Policy can use this scan”. The detail line explains why (here: no observed chain is deployable for capabilities such as `deploy`, `sign_userop`, `rotate_signer`). **Observed chains** in the example are `1` and `80002`. Remediation is to rescan on a chain set the catalogue supports, or wait until coverage is added — not to relax Your intent.
+**Representative case (screenshot):** catalog matching fails **before** your intent constraints matter. The overlay title is “No Crypto Policy can use this scan”. The detail line explains why (here: no observed chain is deployable for capabilities such as `deploy`, `sign_userop`, `rotate_signer`). **Observed chains** in the example are `1` and `80002`. Remediation is to rescan on a chain set the catalog supports, or wait until coverage is added — not to relax Your intent.
 
 Common causes include chain support mismatch, posture incompatibility, or a hard provider constraint. Platform operators monitor these cases as a runtime signal separately from constraint mismatches at persist.
 
-**What to do:** try another catalogue Crypto Policy if available, rescan on supported chains, or wait for catalogue coverage to expand. See also [Explore rejection codes](#cpm-error-explore-rejection).
+**What to do:** try another catalog Crypto Policy if available, rescan on supported chains, or wait for catalog coverage to expand. See also [Explore rejection codes](#cpm-error-explore-rejection) and [Dashboard: scans and Crypto Policy status](#cpm-dashboard-scans).
 
 <a id="cpm-error-constraints-exclude-all"></a>
 
@@ -527,11 +581,11 @@ Common causes include chain support mismatch, posture incompatibility, or a hard
 
 **UI:** constraints blocked — your intent filter removes every candidate that matched the scan.
 
-This is different from “no policy for scan”: catalogue matching succeeded, but **your** hard constraints (allow new wallet, address continuity, key rotation) leave no user-qualified provider.
+This is different from “no policy for scan”: catalog matching succeeded, but **your** hard constraints (allow new wallet, address continuity, key rotation) leave no user-qualified provider.
 
 ![Overlay when hard constraints exclude every Crypto Policy that matched the scan](./images/coucheb.png)
 
-**Representative case (screenshot):** the scan **has** catalogue coverage, but none of the Crypto Policies survive the current hard constraints. The status chip reads `Incompatible with current hard constraints`. **Observed chains** in the example are `11155111` only. The overlay suggests allowing a new wallet/account or relaxing address continuity and key rotation; changing constraints updates the catalogue filter without leaving the page.
+**Representative case (screenshot):** the scan **has** catalog coverage, but none of the Crypto Policies survive the current hard constraints. The status chip reads `Incompatible with current hard constraints`. **Observed chains** in the example are `11155111` only. The overlay suggests allowing a new wallet/account or relaxing address continuity and key rotation; changing constraints updates the catalog filter without leaving the page.
 
 **What to do:** relax one or more constraints in **Your intent**, re-validate, and retry. At persist, CPM still re-checks the same rules on the server.
 
@@ -541,7 +595,7 @@ This is different from “no policy for scan”: catalogue matching succeeded, b
 
 When explore returns no usable provider, CPM may show an **explanation banner** with rejection reasons and machine codes (for example `incompatible.provider.chain`, `incompatible.posture`).
 
-Use the codes when talking to support or operators. They point at provider, chain, or posture coverage — not at a failed Discovery scan. Soft vs hard rejection semantics are summarised with the catalogue-matching concepts above. The “no catalogue match” overlay above is the full-page gate form of the same family of situations.
+Use the codes when talking to support or operators. They point at provider, chain, or posture coverage — not at a failed Discovery scan. Soft vs hard rejection semantics are summarised with the catalog-matching concepts above. The “no catalog match” overlay above is the full-page gate form of the same family of situations.
 
 <a id="cpm-error-persist-or-session"></a>
 
@@ -565,7 +619,7 @@ If you have no eligible completed EOA wallet scan, CPM shows an **empty state** 
 
 **Representative case (screenshot):** the **Scans** picker shows “Select a scan…” with no options. The dashed empty state says no EOA wallet scan is available and offers **Go to wallet scan** (Discovery). Until at least one completed EOA wallet scan exists, Crypto Policy Mgt cannot start composition.
 
-**What to do:** run a wallet scan in Discovery, wait until it completes successfully, then return to CPM (Introduction or Crypto Policy Mgt).
+**What to do:** run a wallet scan in Discovery, wait until it completes successfully, then return to CPM (Introduction, CPM catalog, Dashboard, or Crypto Policy Mgt).
 
 <a id="cpm-error-policy-already-exists"></a>
 
@@ -584,7 +638,7 @@ CAFE allows **at most one** active recommended Crypto Policy per owner + wallet 
 - Remove CP drafts: [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)
 - Wallet signature at persist: [CP-PERSIST runbook](./docs/security/cp-persist-v1.md)
 
-> **For operators / developers:** internal nicknames such as W2 (latest completed scan probe) and couche A/B (catalogue match vs hard constraints) appear in ADRs, developer guides, and some current UI badges on the screenshots above. The user-facing vocabulary in this chapter is authoritative for the SPA Learn more targets and for the copy pass that follows.
+> **For operators / developers:** internal nicknames such as W2 (latest completed scan probe) and couche A/B (catalog match vs hard constraints) appear in ADRs, developer guides, and some current UI badges on the screenshots above. The HTML anchor id `#cpm-scan-and-catalogue` is kept stable for existing deep links even though user-facing spelling is **catalog**. The user-facing vocabulary in this chapter is authoritative for the SPA Learn more targets.
 
 ## Platform Status
 
@@ -851,6 +905,6 @@ For additional help:
 
 ### Scan Types
 
-- **Wallet Scan** — Analyzes Ethereum wallet quantum vulnerability
-- **TLS Scan** — Analyzes TLS endpoint post-quantum readiness
+- **Wallet Scan** — First step of crypto agility: observes Ethereum wallet posture (risk score + NIST). Does not choose a Crypto Policy.
+- **TLS Scan** — Informative only: analyzes TLS endpoint PQC readiness. CAFE does not provide remediation for TLS endpoints.
 
