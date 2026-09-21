@@ -6,6 +6,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 ## Document Versioning
 
+- v0.8.0
+  - Date: September 21st, 2026
+  - Comments: **CFB-P8** — clarify product vs ops catalogue surfaces: SPA uses `GET /crypto-policies*` derived facts (`compatible_networks`); `GET /providers*` remains for admin diagnosis only. Link [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md).
 - v0.7.0
   - Date: August 22nd, 2026
   - Comments: Rewrite **CPM catalogue administration** for two-layer amendement: Crypto Policies (`CPM_CRYPTO_POLICY_PATHS`) + provider manifests (`CPM_PROVIDER_MANIFEST_PATHS`); routes `/crypto-policies` + `/providers`; ADR §7.2.1 signals (catalogue family 1 + runtime family 2); Nicetry refs pinned (CPM-P7 done); diagnose curl uses explore v0.2 (`crypto_policy_id` + `policy_context`).
@@ -557,10 +560,10 @@ crypto_policy_*.json                -> Crypto Policy intention: required_posture
 
 | Layer | API | What operators configure |
 | --- | --- | --- |
-| Provider manifests | `GET /api/cpm/v1/providers` via `CPM_PROVIDER_MANIFEST_PATHS` | `ProviderManifest` files per Capability Provider |
-| Crypto Policies | `GET /api/cpm/v1/crypto-policies` via `CPM_CRYPTO_POLICY_PATHS` | One file per CP (`required_posture` + `allowed_providers`) |
+| Provider manifests | `GET /api/cpm/v1/providers` via `CPM_PROVIDER_MANIFEST_PATHS` | `ProviderManifest` files per Capability Provider — **ops / admin / debug** (not the product SPA catalogue contract) |
+| Crypto Policies | `GET /api/cpm/v1/crypto-policies` via `CPM_CRYPTO_POLICY_PATHS` | One file per CP (`required_posture` + `allowed_providers`); API also returns CPM-derived **`compatible_networks`** for product catalog UI |
 
-**Critical rule:** a Crypto Policy is **intention only** (`required_posture` + `allowed_providers`). There is no `default_selection`. Explore (**couche A**) resolves providers from `allowed_providers` against loaded manifests and returns **scan-compatible** providers. User constraints (**couche B**) apply at persist (and as an indicative UI filter), not as catalogue rows.
+**Critical rule:** a Crypto Policy is **intention** (`required_posture` + `allowed_providers`) plus **derived display facts** CPM computes at read time (today: `compatible_networks`). There is no `default_selection`. Explore (**couche A**) resolves providers from `allowed_providers` against loaded manifests and returns **scan-compatible** providers. User constraints (**couche B**) apply at persist (and as an indicative UI filter), not as catalogue rows. The product frontend must **not** join `GET /providers` to rebuild catalog networks or Expected result — see [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md). Admins may still `curl` `/providers` when diagnosing coverage gaps.
 
 ### Source files (repository)
 
@@ -836,13 +839,13 @@ Admins do **not** mutate user persisted policies through catalogue files. Catalo
 - [ ] `GET /version` (Discovery direct) and `/api/version` (edge) return `{"version":"…"}`
 - [ ] `GET /version` (CPM direct) and `/api/cpm/version` (edge) return `{"version":"…"}`
 - [ ] Platform Status → Version Information shows Frontend, Discovery, and CPM versions (or `Unknown` when a service is down)
-- [ ] `GET /api/cpm/v1/crypto-policies` returns expected CPs with `required_posture` + `allowed_providers`
-- [ ] `GET /api/cpm/v1/providers` shows expected manifests / solution profiles
-- [ ] Explore smoke with a known `scan_id` + `crypto_policy_id` returns `scan_compatible_providers` (or expected rejections); response has `resulting_posture`, `claim_status`, `suggested_user_constraints`, no `graphEdges`
+- [ ] `GET /api/cpm/v1/crypto-policies` returns expected CPs with `required_posture` + `allowed_providers` + derived `compatible_networks`
+- [ ] `GET /api/cpm/v1/providers` shows expected manifests / solution profiles (**admin check** — not required for SPA catalog smoke)
+- [ ] Explore smoke with a known `scan_id` + `crypto_policy_id` returns `scan_compatible_providers` (or expected rejections); response has `resulting_posture`, `claim_status`, `suggested_user_constraints`, `composition`, no `graphEdges`
 - [ ] Legacy explore body with `selection_request` returns **400**
-- [ ] Persist smoke uses `cafe.crypto_policy.v0.2` with `crypto_policy_id` + `user_constraints` (Nicetry refs pinned)
+- [ ] Persist smoke uses `cafe.crypto_policy.v0.2` with `crypto_policy_id` + `user_constraints` and a CPM-assisted `accepted_provider_snapshot` (Nicetry refs pinned)
 - [ ] Prometheus target `cafe-cpm-api` UP
-- [ ] Frontend built with `VITE_CPM_DATA_SOURCE=api` if testing real catalogue in UI
+- [ ] Frontend built with `VITE_CPM_DATA_SOURCE=api` if testing real catalogue in UI (catalog networks come from CPM `compatible_networks`, not a FE provider mirror)
 - [ ] `go test -tags dev ./...` passed in `cafe-crypto-policy-mgt` before image publish
 - [ ] Provider manifest + Crypto Policy loaded: `CPM_PROVIDER_MANIFEST_PATHS` and `CPM_CRYPTO_POLICY_PATHS` set; startup logs show load (and any catalogue signals)
 

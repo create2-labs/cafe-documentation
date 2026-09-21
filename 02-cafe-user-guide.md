@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.11.0
+  - Date: September 21st, 2026
+  - Comments: **CFB-P8** — CPM catalog detail shows platform facts from CPM (compatible networks); the UI does not rely on a local provider mirror. See [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md).
 - v0.10.0
   - Date: September 17th, 2026
   - Comments: Four-tab CPM Navigation (**Introduction** / **CPM catalog** / **Dashboard** / **Crypto Policy Mgt**); Discovery and CPM Introduction narratives (phase 1 observe vs phase 2 compose & persist; TLS informative only / no TLS remediation; CPM matches Crypto Policies it knows); US spelling **catalog**; new anchors `#cpm-catalog` and `#cpm-dashboard-scans`. Existing error anchors unchanged.
@@ -404,7 +407,7 @@ The same explanation applies when you select an older scan in the Mgt scan picke
 
 After you select a wallet scan and a **catalog Crypto Policy**, CPM explores Capability Provider manifests and returns providers that **match this scan** (sometimes labelled **scan-compatible** in the UI).
 
-Matching considers the scan’s observed posture, chain scope, and the Crypto Policy’s solution profile. CPM is authoritative: the UI does not invent catalog coverage.
+Matching considers the scan’s observed posture, chain scope, and the Crypto Policy’s solution profile. CPM is authoritative: the UI displays CPM results and does not invent catalog coverage from a local provider mirror.
 
 | Term | Meaning |
 | --- | --- |
@@ -459,7 +462,8 @@ If you edited a composition that has **not** been persisted, navigating away may
 **CPM catalog** lists Crypto Policies **available in the system** — the catalog CPM knows — so you can browse what the platform can offer before (or while) composing in Crypto Policy Mgt.
 
 - **List** — id, name/label, version (and related catalog fields such as required posture when shown).
-- **Detail** — open a row for description and catalog metadata (Wallet Scan–style list → detail).
+- **Detail** — open a row for description and catalog metadata (Wallet Scan–style list → detail), including **compatible networks** that CPM computed for that Crypto Policy.
+- Those networks (and other catalog facts) come from **CPM**, not from a local frontend copy of a provider. After operators update a provider’s supported chains and redeploy CPM, the catalog detail updates without a separate frontend fixture change.
 - Catalog rows are **not** “Crypto Policies you own”. Persisted bindings appear via scan status on the [Dashboard](#cpm-dashboard-scans) and in Crypto Policy Mgt.
 
 Use **Crypto Policy Mgt** to compose and persist against a completed wallet scan.
@@ -635,6 +639,7 @@ CAFE allows **at most one** active recommended Crypto Policy per owner + wallet 
 
 - Product rules and CPM UI: [functional specifications — CPM UI](./functional-specifications.md#cpm-user-interface--composition-workspace)
 - Capability Provider model: [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md)
+- Catalogue facts / frontend boundary: [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md)
 - Remove CP drafts: [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)
 - Wallet signature at persist: [CP-PERSIST runbook](./docs/security/cp-persist-v1.md)
 
