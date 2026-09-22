@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.12.0
+  - Date: September 22nd, 2026
+  - Comments: **CFB-P17** — catalog detail shows a **provider table** (Provider | Signature | Networks) from CPM; scans with **no chain footprint** (greenfield) can still open matching providers; choosing a provider accepts **all** its deployable networks (no chain picker). See [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) and [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
 - v0.11.0
   - Date: September 21st, 2026
   - Comments: **CFB-P8** — CPM catalog detail shows platform facts from CPM (compatible networks); the UI does not rely on a local provider mirror. See [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md).
@@ -409,13 +412,15 @@ After you select a wallet scan and a **catalog Crypto Policy**, CPM explores Cap
 
 Matching considers the scan’s observed posture, chain scope, and the Crypto Policy’s solution profile. CPM is authoritative: the UI displays CPM results and does not invent catalog coverage from a local provider mirror.
 
+**Greenfield (no chain footprint):** when the scan has **no observed chains** yet, CPM still returns providers that match posture and wallet type. That is **not** a “no Crypto Policy can use this scan” failure — you can continue to choose a provider. Choosing one means you accept that provider’s **full deployable network set** (migration can land on any of those chains later).
+
 | Term | Meaning |
 | --- | --- |
 | **Matches this scan** / **scan-compatible** | Provider passed catalog matching for this scan × Crypto Policy × solution profile |
 | **User-qualified** | Matches this scan **and** your validated hard constraints in the UI (indicative only) |
 | **Persistable** | Server re-check of catalog match and hard constraints plus all persist gates succeeded |
 
-If nothing matches, see [No Crypto Policy matches this scan](#cpm-error-no-policy-for-scan) and [Explore rejection codes](#cpm-error-explore-rejection).
+If nothing matches **and** the scan already has observed chains outside catalog coverage, see [No Crypto Policy matches this scan](#cpm-error-no-policy-for-scan) and [Explore rejection codes](#cpm-error-explore-rejection).
 
 <a id="cpm-hard-constraints"></a>
 
@@ -462,8 +467,11 @@ If you edited a composition that has **not** been persisted, navigating away may
 **CPM catalog** lists Crypto Policies **available in the system** — the catalog CPM knows — so you can browse what the platform can offer before (or while) composing in Crypto Policy Mgt.
 
 - **List** — id, name/label, version (and related catalog fields such as required posture when shown).
-- **Detail** — open a row for description and catalog metadata (Wallet Scan–style list → detail), including **compatible networks** that CPM computed for that Crypto Policy.
-- Those networks (and other catalog facts) come from **CPM**, not from a local frontend copy of a provider. After operators update a provider’s supported chains and redeploy CPM, the catalog detail updates without a separate frontend fixture change.
+- **Detail** — open a row for description and catalog metadata (Wallet Scan–style list → detail), including:
+  - a **summary of compatible networks** for the Crypto Policy as a whole;
+  - a **provider table** (Provider | Signature | Networks) when several Capability Providers are allowed — each row shows that provider’s signature family and its own deployable networks.
+- Those facts come from **CPM**, not from a local frontend copy of a provider. After operators update a provider’s supported chains or signatures and redeploy CPM, the catalog detail updates without a separate frontend fixture change.
+- The networks on a provider row are a **preview of the perimeter** you accept if you later choose that provider in Crypto Policy Mgt — not a control to pick individual chains.
 - Catalog rows are **not** “Crypto Policies you own”. Persisted bindings appear via scan status on the [Dashboard](#cpm-dashboard-scans) and in Crypto Policy Mgt.
 
 Use **Crypto Policy Mgt** to compose and persist against a completed wallet scan.
@@ -497,7 +505,7 @@ Optional summary counts (total / persisted / candidate / N/A) may appear; they d
 
 In **Crypto Policy Mgt**, pick a scan from the **scan picker** (none is pre-selected on first visit), then select a **Crypto Policy** from the catalog (for example PQ account validation). There is **no** automatic default selection from Nicetry or the frontend.
 
-After you select a scan and a Crypto Policy, the page runs explore and shows providers that match this scan (or a rejection banner if none apply).
+After you select a scan and a Crypto Policy, the page runs explore and shows providers that match this scan (or a rejection banner if none apply — **except** greenfield empty-chain scans, which open eligible providers instead of a false “no deployable” refusal).
 
 **Change scan:** use the scan picker to switch. Composition is **local** (sessionStorage) — there is no server draft to save. If you have unsaved editor edits in this session, you are asked to confirm before switching. Work remains allowed only on the **latest completed** scan for the address.
 
@@ -505,13 +513,14 @@ When you leave CPM and return **in the same browser tab** without a deep link, t
 
 #### Choosing a provider that matches this scan
 
-1. Browse the **candidate list** — matching providers are selectable; rejected ones are shown with a reason.
+1. Browse the **candidate list** — when several providers match, pick **one provider** (not individual chains). Matching providers are selectable; rejected ones are shown with a reason.
 2. Select a candidate to open its **solution profile card**, which shows:
    - **Input** — wallet type, chain scope, and profile capabilities
    - **Account** — account abstraction kind (e.g. ERC-4337)
    - **Signature** — signature scheme and family
    - **Posture** — `required_posture` to `resulting_posture` bandeau
    - **Provider maturity** and **claim status** (see below)
+3. Selecting a provider accepts **all** of its deployable networks for the persisted binding. There is **no** chain picker in this flow.
 
 You can **change the candidate** anytime. If your composition already contains meaningful work, you must confirm before replacing it. Changing the composition **never** modifies a **persisted (recommended)** policy until you successfully persist.
 
@@ -639,7 +648,7 @@ CAFE allows **at most one** active recommended Crypto Policy per owner + wallet 
 
 - Product rules and CPM UI: [functional specifications — CPM UI](./functional-specifications.md#cpm-user-interface--composition-workspace)
 - Capability Provider model: [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md)
-- Catalogue facts / frontend boundary: [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md)
+- Catalogue facts / frontend boundary (incl. catalog table, greenfield, multi-chain choice): [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) · [PR plan CFB-\*](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md)
 - Remove CP drafts: [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)
 - Wallet signature at persist: [CP-PERSIST runbook](./docs/security/cp-persist-v1.md)
 

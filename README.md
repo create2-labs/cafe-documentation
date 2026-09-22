@@ -17,11 +17,11 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### User Guide
 
-- **[02-cafe-user-guide.md](./02-cafe-user-guide.md)** — Complete user guide for the CAFE frontend: navigation (Discovery, Platform, CPM, Remediation), **Crypto Policy Management** two-layer workflow (catalogue Crypto Policy → scan-compatible providers → user constraints → persist), account-based access, and all features
+- **[02-cafe-user-guide.md](./02-cafe-user-guide.md)** — Complete user guide for the CAFE frontend: navigation (Discovery, Platform, CPM, Remediation), **Crypto Policy Management** two-layer workflow (catalogue Crypto Policy → scan-compatible providers → user constraints → persist), catalog provider table, greenfield empty-chain explore, multi-chain provider choice, account-based access, and all features
 
 ### Developer Guide
 
-- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including **dual local deployments** (cafe-deploy Compose + cafe-expresso minikube), edge at **`http://localhost:8080`** on minikube for signup/signin, scan `scan_id` correlation, CPM-owned policy assessment, **product catalogue** (`/crypto-policies*` + derived `compatible_networks`; `/providers*` ops-only), **explore v0.2** (`crypto_policy_id` + `policy_context` → `scan_compatible_providers` + `composition`), **persist** (CPM snapshot assist + `user_constraints` + `accepted_provider_snapshot`), and QA sign-off checks.
+- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including **dual local deployments** (cafe-deploy Compose + cafe-expresso minikube), edge at **`http://localhost:8080`** on minikube for signup/signin, scan `scan_id` correlation, CPM-owned policy assessment, **product catalogue** (`/crypto-policies*` + derived `compatible_networks` + `allowed_provider_summaries`; `/providers*` ops-only), **explore v0.2** (greenfield empty `chain_ids`, `scan_compatible_providers` + `composition`), **persist** (CPM snapshot assist with multi-chain `chain_support_used[]` + `user_constraints`), and QA sign-off checks.
 
 ### Admin Guide
 
@@ -33,9 +33,9 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 - [CAFE MBSE / SysML Modelio project](./docs/architecture/cafe-mbse-sysml-modelio-project.md) — Step-by-step project plan to build a SysML/MBSE model of CAFE for Modelio (**out of scope / not started** for the Capability Provider amendement train — see ADR PR plan). From system context and logical architecture to behavior flows, state machines, and traceability.
 - [CPM UI specifications (`cafe-frontend/CPM-specs-ui.md`)](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) — Normative CPM page user stories **US1–US21** and delivery epics **CPM-UI-1…8** (solution profile view, scénario A).
 - [ADR — Capability Provider abstraction (ADR_20260803)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) — ADR governing the Capability Provider model: two-layer explore/persist, `ProviderManifest`, `SolutionProfile`, posture matching, Nicetry pilote.
-- [ADR — CPM catalog facts / FE boundary (ADR_20260918)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) — CPM certifies catalogue/explore/persist facts; product FE does not mirror providers or join `GET /providers`; [PR plan CFB-\*](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
+- [ADR — CPM catalog facts / FE boundary (ADR_20260918)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) — CPM certifies catalogue/explore/persist facts (incl. catalog provider table, greenfield explore, multi-chain snapshot); product FE does not mirror providers or join `GET /providers`; [PR plan CFB-\*](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md) (**CFB-P17** docs train P9+).
 - [ADR — Remove CP drafts (ADR_20260824)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) — No `/drafts*`; signed `POST /policies`; W2; NB1/NB2; [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts_PR_PLAN.md).
-- [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service README covering the provider model, env var (`CPM_CATALOGUE_DIR`), explore v0.2, persist `user_constraints`, catalogue/runtime signals.
+- [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service README covering the provider model, env var (`CPM_CATALOGUE_DIR`), explore v0.2 (incl. greenfield), persist `user_constraints` + multi-chain snapshot, catalogue/runtime signals.
 
 ### API QA
 
