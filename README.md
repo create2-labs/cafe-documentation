@@ -25,7 +25,7 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Admin Guide
 
-- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) — Platform administration for **Compose and minikube**: environments, Helm/kubectl deploy, ingress edge, **Cloudflare Tunnel** (home / no inbound ports), deploy and health checks (`/api/version`, `/api/cpm/version`), pgweb, CPM catalogue (Crypto Policies + provider manifests), ADR §7.2.1 signals (catalogue and runtime), observability, operator diagnosis, and user-support scenarios.
+- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) — Platform administration for **Compose and minikube**: environments, Helm/kubectl deploy, ingress edge, **Cloudflare Tunnel** (home / no inbound ports), deploy and health checks (`/api/version`, `/api/cpm/version`), pgweb, CPM catalogue (`CPM_CATALOGUE_DIR`, fast iteration without Go rebuild), ADR §7.2.1 signals (catalogue and runtime), observability, operator diagnosis, and user-support scenarios.
 
 ### Architecture
 
@@ -35,7 +35,7 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 - [ADR — Capability Provider abstraction (ADR_20260803)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) — ADR governing the Capability Provider model: two-layer explore/persist, `ProviderManifest`, `SolutionProfile`, posture matching, Nicetry pilote.
 - [ADR — CPM catalog facts / FE boundary (ADR_20260918)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) — CPM certifies catalogue/explore/persist facts; product FE does not mirror providers or join `GET /providers`; [PR plan CFB-\*](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
 - [ADR — Remove CP drafts (ADR_20260824)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) — No `/drafts*`; signed `POST /policies`; W2; NB1/NB2; [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts_PR_PLAN.md).
-- [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service README covering the provider model, env vars (`CPM_CRYPTO_POLICY_PATHS`, `CPM_PROVIDER_MANIFEST_PATHS`), explore v0.2, persist `user_constraints`, catalogue/runtime signals.
+- [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service README covering the provider model, env var (`CPM_CATALOGUE_DIR`), explore v0.2, persist `user_constraints`, catalogue/runtime signals.
 
 ### API QA
 

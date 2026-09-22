@@ -278,7 +278,7 @@ States: `requested` → `started` → `completed` | `failed` (or `requested` →
 
 - **`GET /api/cpm/v1/crypto-policies`**, **`GET /api/cpm/v1/crypto-policies/{crypto_policy_id}`** — authenticated; Crypto Policy intention (`required_posture` + `allowed_providers`) plus CPM-derived **`compatible_networks`** (deployable chains from allowed provider manifests; `planned` excluded). This is the **product** catalogue contract for the SPA.
 - **`GET /api/cpm/v1/providers`**, **`GET /api/cpm/v1/providers/{provider_id}`** — authenticated; Capability Provider manifests. **Ops / admin / debug only** — not the product FE contract for catalog display, Expected result, rejection messaging, or persist snapshot assembly ([ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md)).
-- Static files are loaded at CPM startup via `CPM_CRYPTO_POLICY_PATHS` and `CPM_PROVIDER_MANIFEST_PATHS`; administration is documented in [04-cafe-admin-guide.md](./04-cafe-admin-guide.md#cpm-catalogue-administration).
+- Static files are loaded at CPM startup via `CPM_CATALOGUE_DIR` (directory of `*.json`); administration is documented in [04-cafe-admin-guide.md](./04-cafe-admin-guide.md#cpm-catalogue-administration).
 - **Retired (not live):** `/policies/templates`, `/policies/instances`, `/policies/catalog`.
 
 #### Explore (preview) — couche A

@@ -570,6 +570,6 @@ Use this checklist before opening or merging API coherency documentation changes
 - [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) — Capability Provider ADR.
 - [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) — catalogue facts / FE provider boundary (CFB-\*).
 - [ADR_20260918 PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md) — CFB-P\* execution split.
-- [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service, env vars (`CPM_CRYPTO_POLICY_PATHS`, `CPM_PROVIDER_MANIFEST_PATHS`), signals.
+- [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service, env var (`CPM_CATALOGUE_DIR`), signals.
 - [cafe-frontend `docs/cpm-developer.md`](https://github.com/create2-labs/cafe-frontend/blob/main/docs/cpm-developer.md) — FE two-layer maintainer guide (FE-DOC-AMEND).
 - [cafe-frontend `CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) — CPM UI user stories US1–US21 and delivery epics.
