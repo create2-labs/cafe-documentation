@@ -8,7 +8,7 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 - v0.10.0
   - Date: September 22nd, 2026
-  - Comments: **CFB-P17** — product catalogue facts include `allowed_provider_summaries` (catalog table); note greenfield empty-chain explore vs `runtime.no_scan_compatible`; persist snapshot is multi-chain (`chain_support_used[]`). `/providers*` remains admin diagnosis only. Link [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) / [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
+  - Comments: **CFB-P17** — product catalogue facts include `allowed_provider_summaries` (catalog table); note greenfield empty-chain explore vs `runtime.no_scan_compatible`; persist snapshot is multi-chain (`chain_support_used[]`). `/providers*` remains admin diagnosis only. Link [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) / [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md). **Compose fast iteration:** document bind path relative to `compose/` (`../../cafe-crypto-policy-mgt/volumes/catalogs` as in `compose/25-cpm.yml`), empty-dir trap, and recreate after mount changes.
 - v0.9.0
   - Date: September 22nd, 2026
   - Comments: **CPM catalogue load** — document `CPM_CATALOGUE_DIR` (directory scan of `*.json` at boot; retired per-file `CPM_*_PATHS`). Add **fast iteration** for operators: drop JSON + restart (or Docker volume mount over `/app/policy`); no Go recompile required; image rebuild only to bake catalogue into a published tag.
@@ -611,7 +611,7 @@ export CPM_CATALOGUE_DIR=/tmp/cpm-catalogue
 go run ./cmd/cafe-cpm
 ```
 
-**Deploy note:** `cafe-deploy` compose (`compose/25-cpm.yml`) does not override `CPM_CATALOGUE_DIR` by default; the running catalogue is whatever is **baked into** `oleglod/cafe-cpm:${CPM_VERSION}` under `/app/policy/`. Prefer [fast iteration](#fast-iteration-no-go-rebuild) in local/dev; rebuild the image only to publish a new catalogue snapshot.
+**Deploy note:** `cafe-deploy` compose (`compose/25-cpm.yml`) sets `CPM_CATALOGUE_DIR=/app/policy`. In local/dev the fragment also **bind-mounts** `../../cafe-crypto-policy-mgt/volumes/catalogs` over `/app/policy` (path relative to `compose/` — see [fast iteration](#fast-iteration-no-go-rebuild)). Without that host directory prepared (or if the bind is wrong), the container can start with an **empty** catalogue. Without a volume mount (e.g. some prod layouts), the running catalogue is whatever is **baked into** `oleglod/cafe-cpm:${CPM_VERSION}` under `/app/policy/`. Rebuild the image only to publish a new baked catalogue snapshot.
 
 ### Fast iteration (no Go rebuild)
 
@@ -620,33 +620,42 @@ Catalogue content is data, not compiled code. Operators can iterate without `go 
 | Goal | What to do | Restart? | Rebuild image? |
 | --- | --- | --- | --- |
 | Try a new CP / provider in local `go run` | Drop JSON into `CPM_CATALOGUE_DIR` (flat dir) | Yes (process) | No |
-| Try a new CP / provider in Compose/dev container | Mount a host catalogue dir over `/app/policy` (see below), drop JSON on the host | Yes (`docker compose restart cafe-cpm` or equivalent) | No |
+| Try a new CP / provider in Compose/dev container | Mount a host catalogue dir over `/app/policy` (see below), drop JSON on the host | Yes (`docker compose restart cafe-cpm`, or **recreate** if the volume mount itself changed) | No |
 | Ship catalogue in a released image tag | Add JSON under repo `testdata/`, rebuild/push `oleglod/cafe-cpm` | Yes (redeploy) | **Yes** |
 
-**Compose volume mount (dev only example):**
+**Compose volume mount (local/dev — as in `compose/25-cpm.yml`):**
+
+Relative bind paths in `compose/*.yml` are resolved from the **fragment file directory** (`compose/`), not from the repo root. Use `../../` to reach a sibling repo under `create2-labs/`. Do **not** use this mutable host mount for production catalogue without review.
 
 ```yaml
-# compose override or compose/25-cpm.yml (local/dev — do not use for prod catalogue mutability without review)
+# compose/25-cpm.yml (excerpt)
 services:
   cafe-cpm:
     environment:
       CPM_CATALOGUE_DIR: /app/policy
     volumes:
-      - ../cafe-crypto-policy-mgt/.dev-catalogue:/app/policy:ro
+      # compose/ → ../../ = create2-labs/
+      - ../../cafe-crypto-policy-mgt/volumes/catalogs:/app/policy:ro
 ```
 
-Prepare the host directory as a **flat** merge (same layout as the image):
+Prepare the host directory as a **flat** merge (same layout as the image). Prefer `crypto_policy_*.json` / `provider_manifest_*.json` so test-only `invalid_*` fixtures are not copied into the live catalogue:
 
 ```bash
-mkdir -p cafe-crypto-policy-mgt/.dev-catalogue
-cp cafe-crypto-policy-mgt/internal/domain/policy/testdata/*.json \
-   cafe-crypto-policy-mgt/.dev-catalogue/
-cp cafe-crypto-policy-mgt/internal/domain/provider/testdata/*.json \
-   cafe-crypto-policy-mgt/.dev-catalogue/
-# then edit/add JSON under .dev-catalogue/ and restart cafe-cpm
+mkdir -p cafe-crypto-policy-mgt/volumes/catalogs
+cp cafe-crypto-policy-mgt/internal/domain/policy/testdata/crypto_policy_*.json \
+   cafe-crypto-policy-mgt/volumes/catalogs/
+cp cafe-crypto-policy-mgt/internal/domain/provider/testdata/provider_manifest_*.json \
+   cafe-crypto-policy-mgt/volumes/catalogs/
+# then edit/add JSON under volumes/catalogs/ and recreate or restart cafe-cpm
 ```
 
-After restart, confirm load in logs (`cpm: catalogue loaded crypto_policy …` / `provider_manifest …`) and via `GET /api/cpm/v1/crypto-policies` and `GET /api/cpm/v1/providers`.
+If the bind path is wrong, Docker may create an **empty** directory on the host and CPM will log `catalogue dir "/app/policy" contains no .json files`. Check with:
+
+```bash
+docker inspect cafe-cpm-dev --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
+```
+
+After recreate/restart, confirm load in logs (`cpm: catalogue loaded crypto_policy …` / `provider_manifest …`) and via `GET /api/cpm/v1/crypto-policies` and `GET /api/cpm/v1/providers`.
 
 ### Provider manifest and pin refs
 
