@@ -21,7 +21,10 @@ This is **not** a transport or auth failure. Discovery supplied a usable wallet 
 - `adr_signal=runtime.no_scan_compatible`
 - counter `cpm_explore_no_deployable_candidate_total`
 
-**Not this signal:** persist **400** `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` (couche B KO after a scan-compatible snapshot) — that emits `cpm.persist.user_constraints_incompatible` + `adr_signal=runtime.no_provider_after_user_constraints`.
+**Not this signal:**
+
+- persist **400** `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` (couche B KO after a scan-compatible snapshot) — that emits `cpm.persist.user_constraints_incompatible` + `adr_signal=runtime.no_provider_after_user_constraints`.
+- **greenfield** explore with empty `policy_context.chain_ids` alone — couche A skips the chain gate and returns posture/wallet-eligible candidates; do **not** expect `cpm.explore.no_deployable_candidate` for that motive ([ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) amendement 2026-09-21 / CFB-P12).
 
 Typical rejection codes (couche A / provider hard):
 

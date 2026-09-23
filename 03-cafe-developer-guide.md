@@ -4,6 +4,9 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.19.0
+  - Date: September 22nd, 2026
+  - Comments: **CFB-P17** (amendement 2026-09-21) — catalogue `allowed_provider_summaries` (provider / signature / networks table); explore **greenfield** (empty `chain_ids` skips chain gate); persist multi-chain `chain_support_used[]` via CPM assist (no user `chain_id` picker); N-candidate chooser = provider choice. `/providers*` remains ops-only. See [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) and [PR plan CFB-P17](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
 - v0.18.0
   - Date: September 21st, 2026
   - Comments: **CFB-P8** — catalogue product facts come from CPM (`compatible_networks` on `GET /crypto-policies*`); `GET /providers` is **ops/admin only** (not the product FE contract); no FE Nicetry / provider-manifest mirror. Explore exposes derived `composition`; persist snapshot via CPM assist. See [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) and [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
@@ -235,18 +238,20 @@ Version strings come from the image build (`APP_VERSION` / Git tag). They are **
 
 Retired / removed routes (do not use): `GET /api/cpm/v1/policies/templates`, `/policies/instances`, `/policies/catalog`; **all** `/api/cpm/v1/drafts*` (ADR_20260824 — no shim).
 
-#### Catalogue facts vs providers (FE boundary — CFB-P8)
+#### Catalogue facts vs providers (FE boundary — CFB-P8 / CFB-P17)
 
-Normative boundary: [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) / [PR plan CFB-\*](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
+Normative boundary: [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) / [PR plan CFB-\*](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md) (amendement 2026-09-21).
 
 | Surface | Source of truth | Forbidden |
 | --- | --- | --- |
-| Catalog compatible networks | `compatible_networks` on `GET /crypto-policies*` (CPM-derived from loaded manifests; `planned` excluded) | FE provider fixture / mirror; product join to `GET /providers` |
+| Catalog compatible networks (union) | `compatible_networks` on `GET /crypto-policies*` (CPM-derived; `planned` excluded) | FE provider fixture / mirror; product join to `GET /providers` |
+| Catalog provider table | `allowed_provider_summaries` on `GET /crypto-policies*` (per-provider `provider_id`, signature summary, deployable networks) | Flat `allowed_providers.join` as the only attribution UI; product join to `/providers` |
 | Expected result (account / signature / constraints) | Explore `composition` on each `scan_compatible_providers[]` entry | Local Nicetry / profile mirror |
-| Persist `accepted_provider_snapshot` | CPM assist `POST /accepted-provider-snapshots` (then relay + sign) | Client assembly from embedded provider profile |
-| Rejection messaging (0 candidates) | Explore `rejected_candidates` messages/codes (**option A**) | Reformulate by loading `/providers` |
+| Multi-candidate choice | UI over explore `scan_compatible_providers[]` — select **one provider**; no chain picker | Inventing chain scope in the FE; joining `/providers` |
+| Persist `accepted_provider_snapshot` | CPM assist `POST /accepted-provider-snapshots` → multi-chain `chain_support_used[]` (no user `chain_id`) | Client assembly; user-picked single chain |
+| Rejection messaging (0 candidates) | Explore `rejected_candidates` messages/codes (**option A**); **not** for greenfield empty `chain_ids` alone | Reformulate by loading `/providers`; treat empty chains as `runtime.no_scan_compatible` |
 
-**`GET /providers*`** remains a live CPM API for **ops, admin diagnosis, and debug**. It is **not** the product frontend contract for catalog, Expected result, rejection copy, or persist snapshot assembly. The SPA must not reintroduce a Nicetry / `ProviderManifest` mirror under product `src/cpm`.
+**`GET /providers*`** remains a live CPM API for **ops, admin diagnosis, and debug**. It is **not** the product frontend contract for catalog, Expected result, rejection copy, multi-candidate labels, or persist snapshot assembly. The SPA must not reintroduce a Nicetry / `ProviderManifest` mirror under product `src/cpm`.
 
 ## Discovery Workflows
 
@@ -344,11 +349,13 @@ Discovery never reads CPM persistence directly, and it must not map CPM internal
 
 Vocabulary: **scan-compatible** (couche A), **user-qualified** (couche B UI indicative), **persistable** (CPM rejeu A+B + gates).
 
-A catalogue **Crypto Policy** is intention plus **CPM-derived display facts**: `required_posture` + `allowed_providers` + **`compatible_networks`** (union of deployable `chain_support` for allowed providers; `status ≠ planned`). There is no `default_selection` and no template/instance catalogue. Product UIs read these fields from `GET /crypto-policies*` — they do **not** join `GET /providers` to compute networks.
+A catalogue **Crypto Policy** is intention plus **CPM-derived display facts**: `required_posture` + `allowed_providers` + **`compatible_networks`** (union of deployable `chain_support` for allowed providers; `status ≠ planned`) + **`allowed_provider_summaries`** (one row per allowed provider: signature summary + that provider’s deployable networks). There is no `default_selection` and no template/instance catalogue. Product UIs read these fields from `GET /crypto-policies*` — they do **not** join `GET /providers` to compute networks or the catalog table. Redeploying CPM alone is enough to refresh catalog table signatures/networks.
 
 ### Explore a decision synchronously (wire v0.2)
 
 `decisions/explore` is a synchronous preview. It evaluates a Crypto Policy and wallet `policy_context` against Capability Provider manifests (**couche A only**) and returns **`scan_compatible_providers`**. Each compatible candidate includes a derived **`composition`** view (account / signature / constraints) sufficient for Expected result — not the admin `ProviderManifest` dump. It does not persist a final policy and does not trigger the async assessment pipeline. Couche B fields do **not** belong on explore.
+
+**Greenfield (amendement 2026-09-21):** when `policy_context.chain_ids` is empty after normalisation, couche A **skips** the chain gate. Posture + wallet type still apply. Eligible candidates are returned (often N≥1). Empty chains alone **must not** produce `cpm.explore.no_deployable_candidate` / `adr_signal=runtime.no_scan_compatible`, and the SPA must not show the “no deployable candidate” refusal for that motive. Choosing a candidate later pins that provider’s full deployable multi-chain set at persist.
 
 #### Explore request fields (v0.2)
 
@@ -444,7 +451,7 @@ curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
 
 #### No scan-compatible provider (HTTP 200 — not an error)
 
-Explore may return **200** with empty `scan_compatible_providers` and populated `rejected_candidates` — for example when no allowed provider can deploy on the wallet’s chain set. This is a **runtime signal** (ADR §7.2.1 family 2: `adr_signal=runtime.no_scan_compatible`), not a failed HTTP call. Distinct from persist couche B failure (`PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`).
+Explore may return **200** with empty `scan_compatible_providers` and populated `rejected_candidates` — for example when no allowed provider can deploy on the wallet’s **non-empty** chain set. This is a **runtime signal** (ADR §7.2.1 family 2: `adr_signal=runtime.no_scan_compatible`), not a failed HTTP call. Distinct from persist couche B failure (`PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`). **Does not apply** to greenfield empty `chain_ids` alone (those scans return posture/wallet-eligible candidates).
 
 | Audience | What to use |
 | --- | --- |
@@ -456,9 +463,11 @@ Explore may return **200** with empty `scan_compatible_providers` and populated 
 
 ### Persist payload — `cafe.crypto_policy.v0.2`
 
-Normative engagement is **`POST /api/cpm/v1/policies`** (signed). There is **no** `/drafts*` path. The closed hashed `payload` must be **schema version `cafe.crypto_policy.v0.2`** with `crypto_policy_id`, `user_constraints`, `accepted_provider_snapshot`, and top-level `accepted_findings`. Clients obtain a registry-authoritative `accepted_provider_snapshot` via **`POST /api/cpm/v1/accepted-provider-snapshots`** (CFB-P5 Option B) before challenge/sign — they must **not** assemble the snapshot from a frontend provider fixture. See [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
+Normative engagement is **`POST /api/cpm/v1/policies`** (signed). There is **no** `/drafts*` path. The closed hashed `payload` must be **schema version `cafe.crypto_policy.v0.2`** with `crypto_policy_id`, `user_constraints`, `accepted_provider_snapshot`, and top-level `accepted_findings`. Clients obtain a registry-authoritative `accepted_provider_snapshot` via **`POST /api/cpm/v1/accepted-provider-snapshots`** (CFB-P5 Option B; multi-chain **CFB-P14**) before challenge/sign — they must **not** assemble the snapshot from a frontend provider fixture, and they must **not** send a user-picked `chain_id` for assist. See [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
 
-Flow: compose locally (NB2) → `POST /wallet-challenges` → EIP-191 sign → `POST /policies`. Explore / challenge / persist require **W2** (`422 SCAN_NOT_LATEST` / `503 DISCOVERY_UNAVAILABLE`). Replace = **NB1** DELETE then new signed persist. Retry / conflict → **409** `POLICY_ALREADY_EXISTS` — reconcile via `GET /policies` + `payload_sha256`.
+Flow: compose locally (NB2; choose **provider** among N explore candidates) → CPM snapshot assist → `POST /wallet-challenges` → EIP-191 sign → `POST /policies`. Explore / challenge / persist require **W2** (`422 SCAN_NOT_LATEST` / `503 DISCOVERY_UNAVAILABLE`). Replace = **NB1** DELETE then new signed persist. Retry / conflict → **409** `POLICY_ALREADY_EXISTS` — reconcile via `GET /policies` + `payload_sha256`.
+
+**Multi-chain snapshot (amendement 2026-09-21 / CFB-P14):** `accepted_provider_snapshot.chain_support_used` is a **non-empty array** of all deployable (`status ≠ planned`) chain entries for the chosen profile — breaking vs the CFB-P5 mono-object shape. Assist derives the set from the registry + `solution_profile_ref` (+ findings). Constrained scans: couche A / persist require at least one observed chain in the pinned set; greenfield: chain gate skipped at eligibility, snapshot still pins the full set. Product UI has **no** chain picker.
 
 **Minimum required fields (v0.2):**
 
@@ -482,7 +491,10 @@ Flow: compose locally (NB2) → `POST /wallet-challenges` → EIP-191 sign → `
     "solution_profile_id": "nicetry.fors_c.erc4337.v0_1",
     "manifest_version": "2026-08",
     "snapshot_at": "2026-08-01T00:00:00Z",
-    "accepted_findings": ["requires_bundler", "requires_local_signer_state"]
+    "accepted_findings": ["requires_bundler", "requires_local_signer_state"],
+    "chain_support_used": [
+      { "chain_id": "11155111", "status": "deployable" }
+    ]
   }
 }
 ```
@@ -492,6 +504,7 @@ Flow: compose locally (NB2) → `POST /wallet-challenges` → EIP-191 sign → `
 - `crypto_policy_id` is required (legacy `template_id` on the wire → invalid).
 - `user_constraints` is required; CPM **rejoue couche A then B**. Couche B failure → **400** `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` (runtime signal `adr_signal=runtime.no_provider_after_user_constraints`).
 - Provider refs in `accepted_provider_snapshot` must be **pinned** — `unpinned_pending_fixture` is rejected. Nicetry fixture refs are pinned (**CPM-P7** done).
+- `chain_support_used` must be a non-empty array; no entry may have `status: planned`; hashed `chain_id` values are **strings**.
 - Soft findings listed in `accepted_findings` must match those returned by explore for that candidate.
 - Wallet proof (signed message from `wallet-challenges`) is required on `POST /policies`.
 - Client-supplied `payload_sha256` on write is **ignored** (server authority).
@@ -548,13 +561,14 @@ Use this checklist before opening or merging API coherency documentation changes
 - Policy assessment docs say CPM-owned, wallet-scan only, body `scan_id` + `crypto_policy_id`, `202` on acceptance, `policy_context` / legacy `selection_request` rejected, TLS scan IDs rejected.
 - Delete scan docs mention CPM reference verification, `409 SCAN_REFERENCED_BY_POLICY`, and `503 POLICY_REFERENCE_CHECK_UNAVAILABLE`.
 - Edge docs preserve `/api/internal/*` as not exposed.
-- **Catalogue (product):** `GET /crypto-policies*` documents intention + derived `compatible_networks`; retired `/policies/templates|instances|catalog` not presented as live.
-- **`GET /providers*`:** documented as **ops/admin only** — not the product FE contract for catalog, Expected result, rejection copy, or snapshot assembly.
+- **Catalogue (product):** `GET /crypto-policies*` documents intention + derived `compatible_networks` + `allowed_provider_summaries` (catalog table); retired `/policies/templates|instances|catalog` not presented as live.
+- **`GET /providers*`:** documented as **ops/admin only** — not the product FE contract for catalog, Expected result, rejection copy, multi-candidate labels, or snapshot assembly.
 - **Explore v0.2:** input `crypto_policy_id` + `policy_context` (+ optional `scan_id`); output `scan_compatible_providers` (+ derived `composition`); legacy explore → **400**.
+- **Greenfield:** empty `chain_ids` skips couche A chain gate; not `runtime.no_scan_compatible` for that motive alone.
 - **Capability Providers:** explore response carries `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, `suggested_user_constraints`, `composition` — no `graphEdges`/`nodeInstances`.
 - **`claim_status: "declared"`** is documented as a provider declaration, not an audited or executed proof.
-- **Persist (no drafts):** snapshot from CPM assist (`POST /accepted-provider-snapshots`); signed `POST /policies` with `schema_version: "cafe.crypto_policy.v0.2"`, closed hashed fields + `payload_sha256` (server); CPM rejeu A+B; `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` on couche B KO; `unpinned_pending_fixture` refs rejected (Nicetry refs pinned); W2; NB1/NB2.
-- **FE boundary:** no product Nicetry / provider-manifest mirror; no product join to `/providers` (ADR_20260918 / CFB-P8).
+- **Persist (no drafts):** snapshot from CPM assist (`POST /accepted-provider-snapshots`) with multi-chain `chain_support_used[]` (no user `chain_id`); signed `POST /policies` with `schema_version: "cafe.crypto_policy.v0.2"`, closed hashed fields + `payload_sha256` (server); CPM rejeu A+B; `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` on couche B KO; `unpinned_pending_fixture` refs rejected (Nicetry refs pinned); W2; NB1/NB2.
+- **FE boundary:** no product Nicetry / provider-manifest mirror; no product join to `/providers`; N-candidate UI chooses a **provider** (ADR_20260918 amendement 2026-09-21 / CFB-P17).
 - **Removed:** `/api/cpm/v1/drafts*` — do not document as live.
 - **Vocabulary:** scan-compatible / user-qualified / persistable; avoid `ranked_candidates` as normative term.
 
