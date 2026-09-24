@@ -25,7 +25,7 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Admin Guide
 
-- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) — Platform administration for **Compose and minikube**: environments, Helm/kubectl deploy, ingress edge, **Cloudflare Tunnel** (home / no inbound ports), deploy and health checks (`/api/version`, `/api/cpm/version`), pgweb, CPM catalogue (`CPM_CATALOGUE_DIR`, fast iteration without Go rebuild), ADR §7.2.1 signals (catalogue and runtime), observability, operator diagnosis, and user-support scenarios.
+- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) — Platform administration for **Compose and minikube**: environments, Helm/kubectl deploy, ingress edge, **Cloudflare Tunnel** (home / no inbound ports), deploy and health checks (`/api/version`, `/api/cpm/version`), pgweb, CPM catalogue (read-only mount of `cafe-deploy/catalogs/cpm/files`, pins `CPM_VERSION` + `CPM_CATALOGUE_REVISION`, recreate without a new image), ADR §7.2.1 signals (catalogue and runtime), observability, operator diagnosis, and user-support scenarios.
 
 ### Architecture
 
