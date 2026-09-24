@@ -6,6 +6,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 ## Document Versioning
 
+- v0.11.0
+  - Date: September 24th, 2026
+  - Comments: **CCD-P5** — the served CPM catalogue is the read-only mount of `cafe-deploy/catalogs/cpm/files`, not files baked into `oleglod/cafe-cpm`. Document the two pins (`CPM_VERSION`, `CPM_CATALOGUE_REVISION`), recreate after a JSON edit, fail-closed boot when the directory is empty or has no valid policy or manifest, and that `testdata/` is module fixtures only. Link [ADR_20260924](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260924_cpm_catalogue_at_deploy.md).
 - v0.10.0
   - Date: September 22nd, 2026
   - Comments: **CFB-P17** — product catalogue facts include `allowed_provider_summaries` (catalog table); note greenfield empty-chain explore vs `runtime.no_scan_compatible`; persist snapshot is multi-chain (`chain_support_used[]`). `/providers`* remains admin diagnosis only. Link [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) / [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md). **Compose fast iteration:** document bind path relative to `compose/` (`../../cafe-crypto-policy-mgt/volumes/catalogs` as in `compose/25-cpm.yml`), empty-dir trap, and recreate after mount changes.
@@ -73,9 +76,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
   8. [Authentication and internal tokens (operator view)](#authentication-and-internal-tokens-operator-view)
   9. [CPM catalogue administration](#cpm-catalogue-administration)
     1. [Two layers (must stay consistent)](#two-layers-must-stay-consistent)
-    2. [Source files (repository)](#source-files-repository)
-    3. [Environment variables](#environment-variables)
-    4. [Fast iteration (no Go rebuild)](#fast-iteration-no-go-rebuild)
+    2. [Served catalogue (deploy mount)](#served-catalogue-deploy-mount)
+    3. [Two pins](#two-pins)
+    4. [Fast iteration (edit files and recreate)](#fast-iteration-edit-files-and-recreate)
     5. [Provider manifest and pin refs](#provider-manifest-and-pin-refs)
     6. [RAZ fixtures -- dev catalog reset](#raz-fixtures----dev-catalog-reset)
     7. [Procedure: add a second Capability Provider](#procedure-add-a-second-capability-provider)
@@ -199,7 +202,7 @@ cp env/dev.env.template env/dev.local.env   # edit secrets locally; never commit
 docker compose -f docker-compose.dev.yml --env-file env/dev.local.env up -d
 ```
 
-Key version pins (examples): `DISCOVERY_VERSION`, `FRONTEND_VERSION`, `CPM_VERSION`, `NGINX_VERSION`. Image tags are the primary rollback lever.
+Key version pins (examples): `DISCOVERY_VERSION`, `FRONTEND_VERSION`, `CPM_VERSION`, `CPM_CATALOGUE_REVISION`, `NGINX_VERSION`. Image tags roll back a binary. `CPM_CATALOGUE_REVISION` rolls back the catalogue files; it is independent of `CPM_VERSION` (see [Two pins](#two-pins)).
 
 On **minikube**, secrets are a Kubernetes Secret (`cafe-platform-secrets`) — see [cafe-expresso](https://github.com/create2-labs/cafe-expresso/blob/main/docs/secrets.md) `docs/secrets.md` and deploy commands below (never commit plaintext).
 
@@ -599,9 +602,11 @@ Browser: `http://localhost:8080/signup` / `http://localhost:8080/signin`.
 
 ## CPM catalogue administration
 
-The **CP catalogue** is not a single database table. CPM loads **static JSON files at startup** from one directory (`CPM_CATALOGUE_DIR`) and serves them through read APIs. There is **no hot reload**: changing the catalogue requires new or updated files and a **CPM process restart** (container restart or local process restart).
+The **CP catalogue** is not a single database table and it is **not inside the `cafe-cpm` image**. CPM loads **static JSON files at startup** from one directory (`CPM_CATALOGUE_DIR`, `/app/policy` in Compose and minikube) and serves them through read APIs. The runtime image does not copy a catalogue into `/app/policy`. Staging, production, Compose, and minikube all start CPM with a **read-only mount** of the product files.
 
-**Important:** adding or editing a Crypto Policy or provider manifest is **JSON only**. You do **not** need to recompile the Go binary. An image rebuild is only required when you want the new files **baked into** a published `oleglod/cafe-cpm` tag (see [Fast iteration](#fast-iteration-no-go-rebuild)).
+There is **no hot reload**. Editing a JSON and leaving the old container running leaves `GET /crypto-policies` and `GET /providers` unchanged. Recreate or restart CPM after the file change. Publishing that change is a commit on `cafe-deploy` (and the same bytes on cafe-expresso), not a new `oleglod/cafe-cpm` tag and not a change in `cafe-crypto-policy-mgt`.
+
+Normative decision: [ADR_20260924](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260924_cpm_catalogue_at_deploy.md).
 
 ### Two layers (must stay consistent)
 
@@ -626,60 +631,29 @@ crypto_policy_*.json                -> Crypto Policy intention: required_posture
 
 **Critical rule:** a Crypto Policy is **intention** (`required_posture` + `allowed_providers`) plus **derived display facts** CPM computes at read time (`compatible_networks`, `allowed_provider_summaries`). There is no `default_selection`. Explore (**couche A**) resolves providers from `allowed_providers` against loaded manifests and returns **scan-compatible** providers — including **greenfield** scans with empty observed chains (chain gate skipped). User constraints (**couche B**) apply at persist (and as an indicative UI filter), not as catalogue rows. Persist pins a multi-chain `chain_support_used[]` from the chosen profile (no user chain picker). The product frontend must **not** join `GET /providers` to rebuild catalog networks, the provider table, Expected result, or the snapshot — see [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md). Admins may still `curl` `/providers` when diagnosing coverage gaps.
 
-### Source files (repository)
+### Served catalogue (deploy mount)
 
-Canonical fixtures live in **cafe-crypto-policy-mgt**:
+The product catalogue lives in **cafe-deploy**, flat JSON only:
 
-```
-internal/domain/provider/testdata/
-+-- provider_manifest_nicetry_v0_1.json       <- ProviderManifest (Nicetry pilot; refs pinned)
-internal/domain/policy/testdata/
+
+| Path | Role | Mounted in the container? |
+| --- | --- | --- |
+| `catalogs/cpm/files/*.json` | Crypto Policies and ProviderManifests that staging, prod, Compose, and minikube serve | Yes, read-only → `/app/policy` |
+| `catalogs/cpm/REVISION` | One line: the catalogue label (`CPM_CATALOGUE_REVISION`) | No |
+| `catalogs/cpm/expected-ids.json` | Policy ids and provider ids the deploy smoke requires | No |
+
+
+`files/` must not contain `invalid_*`, instance fixtures, `REVISION`, or `expected-ids.json`. The loader only sees `*.json` in `CPM_CATALOGUE_DIR`.
+
+The shipped pair (not the whole `testdata/` tree) is:
+
+```text
+cafe-deploy/catalogs/cpm/files/
++-- provider_manifest_nicetry_v0_1.json          <- provider_id nicetry
 +-- crypto_policy_pq_account_validation_v1.json  <- id cpm_pq_account_validation_v1
-+-- (+ invalid_* / instance fixtures for tests only — skipped at catalogue load)
 ```
 
-Validation logic: `internal/domain/provider/`, `internal/domain/policy/`.
-Loader: `internal/api/catalogue_load.go` → `loadReadStoreFromCatalogueDir()` (classifies each `*.json` as crypto policy or provider manifest; incompatible / unrelated files are **skipped with a log line**). Boot fails only if zero valid policies or zero valid providers remain.
-
-In the **CPM Docker image**, both `testdata/` trees are copied **flat** into `/app/policy/` (`Dockerfile`). Runtime default: `CPM_CATALOGUE_DIR=/app/policy`.
-
-### Environment variables
-
-
-| Variable            | Default (image) | Meaning                                                                                                                   |
-| ------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `CPM_CATALOGUE_DIR` | `/app/policy`   | Directory of catalogue `*.json` files. At boot CPM classifies each file as a **Crypto Policy** or a **ProviderManifest**. |
-
-
-Example (local `go run` with a flat catalogue dir):
-
-```bash
-mkdir -p /tmp/cpm-catalogue
-cp internal/domain/policy/testdata/*.json /tmp/cpm-catalogue/
-cp internal/domain/provider/testdata/*.json /tmp/cpm-catalogue/
-
-export CPM_AUTH_REQUIRED=false
-export CPM_CATALOGUE_DIR=/tmp/cpm-catalogue
-go run ./cmd/cafe-cpm
-```
-
-**Deploy note:** `cafe-deploy` compose (`compose/25-cpm.yml`) sets `CPM_CATALOGUE_DIR=/app/policy`. In local/dev the fragment also **bind-mounts** `../../cafe-crypto-policy-mgt/volumes/catalogs` over `/app/policy` (path relative to `compose/` — see [fast iteration](#fast-iteration-no-go-rebuild)). Without that host directory prepared (or if the bind is wrong), the container can start with an **empty** catalogue. Without a volume mount (e.g. some prod layouts), the running catalogue is whatever is **baked into** `oleglod/cafe-cpm:${CPM_VERSION}` under `/app/policy/`. Rebuild the image only to publish a new baked catalogue snapshot.
-
-### Fast iteration (no Go rebuild)
-
-Catalogue content is data, not compiled code. Operators can iterate without `go build` or a full image rebuild.
-
-
-| Goal                                             | What to do                                                                       | Restart?                                                                                    | Rebuild image? |
-| ------------------------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------- |
-| Try a new CP / provider in local `go run`        | Drop JSON into `CPM_CATALOGUE_DIR` (flat dir)                                    | Yes (process)                                                                               | No             |
-| Try a new CP / provider in Compose/dev container | Mount a host catalogue dir over `/app/policy` (see below), drop JSON on the host | Yes (`docker compose restart cafe-cpm`, or **recreate** if the volume mount itself changed) | No             |
-| Ship catalogue in a released image tag           | Add JSON under repo `testdata/`, rebuild/push `oleglod/cafe-cpm`                 | Yes (redeploy)                                                                              | **Yes**        |
-
-
-**Compose volume mount (local/dev — as in** `compose/25-cpm.yml`**):**
-
-Relative bind paths in `compose/*.yml` are resolved from the **fragment file directory** (`compose/`), not from the repo root. Use `../../` to reach a sibling repo under `create2-labs/`. Do **not** use this mutable host mount for production catalogue without review.
+Compose (`compose/25-cpm.yml`) bind-mounts that directory. The path is **relative to the compose file** (`compose/`), not the repo root:
 
 ```yaml
 # compose/25-cpm.yml (excerpt)
@@ -687,29 +661,71 @@ services:
   cafe-cpm:
     environment:
       CPM_CATALOGUE_DIR: /app/policy
+      CPM_CATALOGUE_REVISION: ${CPM_CATALOGUE_REVISION}
     volumes:
-      # path must be relative to this file one
-      - ../volumes/catalogs:/app/policy:ro
+      - ../catalogs/cpm/files:/app/policy:ro
 ```
 
-Prepare the host directory as a **flat** merge (same layout as the image). Prefer `crypto_policy_*.json` / `provider_manifest_*.json` so test-only `invalid_`* fixtures are not copied into the live catalogue:
+On minikube, cafe-expresso mounts a ConfigMap built from **the same bytes** (`charts/cafe-platform/config/cpm-catalogue/*.json`). Do not edit those JSON files in cafe-expresso. Change them in `cafe-deploy/catalogs/cpm/files`, copy the bytes in the same change, and set the Helm pin to the same `REVISION` line. `cafe-expresso/scripts/check-cpm-catalogue-same-bytes.sh` fails if the copies diverge.
+
+`testdata/` in **cafe-crypto-policy-mgt** (`internal/domain/policy/testdata/`, `internal/domain/provider/testdata/`) is the Go module fixture set, including `invalid_*`. It is **not** the catalogue the stack serves, and the runtime image does not copy it to `/app/policy`. Unit tests keep reading those fixtures. An operator publishing a Crypto Policy or a provider manifest does not edit that tree.
+
+Loader: `loadReadStoreFromCatalogueDir()` classifies each `*.json` as a Crypto Policy or a ProviderManifest. An incompatible file is **skipped with a log line**. That skip is not a successful deploy if an id in `expected-ids.json` is missing. The process **exits** when the directory is missing, contains no `*.json`, or loads zero valid policies or zero valid manifests. There is no second path that serves files left over from an image build.
+
+### Two pins
+
+Each environment names the binary and the catalogue separately. Review them together.
+
+
+| Variable | Where | Meaning |
+| --- | --- | --- |
+| `CPM_VERSION` | `env/*.env` (Compose); image tag in Helm | Tag of `oleglod/cafe-cpm`. Change it when the **binary** changes. |
+| `CPM_CATALOGUE_REVISION` | `env/*.env.template`, `env/*.local.env`, Helm `values.yaml` | Must equal the single line in `cafe-deploy/catalogs/cpm/REVISION`. |
+| `CPM_CATALOGUE_DIR` | Compose and Helm (`/app/policy`) | Directory CPM scans at boot. The image default is `/app/policy`, which is **empty** until the deploy mount is present. |
+
+
+A catalogue change bumps `catalogs/cpm/REVISION` and `CPM_CATALOGUE_REVISION` in the same change. Leave `CPM_VERSION` alone when the binary did not change. Update `expected-ids.json` when the set of policy or provider ids changes, so `scripts/test-cpm-catalogue-pin-smoke.sh` still matches the lists CPM returns.
+
+Local `go run` (CPM engineers), pointed at the **deploy** files, not at `testdata/`:
 
 ```bash
-mkdir -p cafe-deploy/volumes/catalogs
-cp cafe-crypto-policy-mgt/internal/domain/policy/testdata/crypto_policy_*.json \
-   cafe-deploy/volumes/catalogs/
-cp cafe-crypto-policy-mgt/internal/domain/provider/testdata/provider_manifest_*.json \
-   cafe-deploy/volumes/catalogs/
-# then edit/add JSON under volumes/catalogs/ and recreate or restart cafe-cpm
+cd cafe-crypto-policy-mgt
+export CPM_AUTH_REQUIRED=false
+export CPM_CATALOGUE_DIR=/path/to/cafe-deploy/catalogs/cpm/files
+go run ./cmd/cafe-cpm
 ```
 
-If the bind path is wrong, Docker may create an **empty** directory on the host and CPM will log `catalogue dir "/app/policy" contains no .json files`. Check with:
+### Fast iteration (edit files and recreate)
+
+Catalogue content is data. Change a JSON under `cafe-deploy/catalogs/cpm/files`, then recreate CPM. No `go build`, and no new `oleglod/cafe-cpm` tag.
+
+
+| Goal | What to do | Recreate CPM? | New image tag? |
+| --- | --- | --- | --- |
+| Change a served CP or provider (Compose) | Edit `catalogs/cpm/files/*.json`. If you are publishing the change, bump `REVISION` and `CPM_CATALOGUE_REVISION` together. | Yes | No |
+| Same change on minikube | Copy those same bytes into `cafe-expresso` `config/cpm-catalogue/` and set the Helm pin to the same label. | Yes (rollout / helm upgrade) | No |
+| Change the CPM binary | Rebuild and pin `CPM_VERSION` | Yes | **Yes** |
+
+
+From `cafe-deploy`, after editing `catalogs/cpm/files/` (dev example; use the env file of the stack you run):
+
+```bash
+docker compose -f docker-compose.dev.yml --env-file env/dev.local.env up -d --force-recreate cafe-cpm
+```
+
+`docker compose restart` reloads the process against the same mount and is enough when only file **contents** changed. **Recreate** when the volume line, `CPM_CATALOGUE_DIR`, or `CPM_CATALOGUE_REVISION` changed.
+
+**Empty-directory trap.** Bind paths in `compose/*.yml` resolve from `compose/`. `../catalogs/cpm/files` is `cafe-deploy/catalogs/cpm/files`. If that host path does not exist, Docker creates an **empty directory** and mounts it over `/app/policy`. CPM then exits at catalogue load (`catalogue dir "/app/policy" contains no .json files`) and does not become healthy. Prepare `files/` before the first `up`. Confirm the mount source:
 
 ```bash
 docker inspect cafe-cpm-dev --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
 ```
 
-After recreate/restart, confirm load in logs (`cpm: catalogue loaded crypto_policy …` / `provider_manifest …`) and via `GET /api/cpm/v1/crypto-policies` and `GET /api/cpm/v1/providers`.
+The source must be `.../cafe-deploy/catalogs/cpm/files` (container name is `cafe-cpm-${ENV}`; `cafe-cpm-dev` is the dev example).
+
+The same exit happens with no mount, with zero valid Crypto Policies, or with zero valid ProviderManifests (`no valid crypto policies loaded` / `no valid provider manifests loaded`). Do not treat a `catalogue skip` log as a successful catalogue publish.
+
+After recreate, confirm logs (`cpm: catalogue loaded crypto_policy …` / `provider_manifest …`) and `GET /api/cpm/v1/crypto-policies` plus `GET /api/cpm/v1/providers`. Compose smoke: `cafe-deploy/scripts/test-cpm-catalogue-pin-smoke.sh` (revision vs `REVISION`, list ids vs `expected-ids.json`; empty `files/` must not become healthy).
 
 ### Provider manifest and pin refs
 
@@ -753,31 +769,27 @@ Full explore diagnosis: [operations runbook](./docs/operations/cpm-explore-no-ca
 
 ### RAZ fixtures -- dev catalogue reset
 
-When changing catalogue fixtures during development:
+When replacing served catalogue files during development:
 
 1. Stop CPM (`docker stop cafe-cpm-dev` or equivalent).
-2. Replace fixture files in the catalogue directory (Crypto Policy and/or provider manifest under `CPM_CATALOGUE_DIR`, or the host mount used in [fast iteration](#fast-iteration-no-go-rebuild)).
+2. Replace JSON under `cafe-deploy/catalogs/cpm/files/` (the mount in [fast iteration](#fast-iteration-edit-files-and-recreate)). Do not copy `testdata/` into that directory.
 3. **RAZ DB drafts**: delete in-progress drafts that reference the old catalogue IDs (or run full dev DB wipe if safe):
   ```bash
    # Soft delete orphaned drafts (dev only -- never in production without sign-off)
    docker exec -e PGPASSWORD=cafe cafe-postgres-dev psql -U cafe -d cafe \
      -c "UPDATE crypto_policies SET deleted_at=NOW() WHERE deleted_at IS NULL;"
   ```
-4. **Restart** CPM (process or container). No Go recompile. Rebuild the image only if you are publishing a baked catalogue tag.
+4. **Recreate** CPM. No Go recompile and no new `cafe-cpm` image tag.
 5. Verify via `GET /api/cpm/v1/crypto-policies` and `GET /api/cpm/v1/providers`.
 
 
 
 ### Procedure: add a second Capability Provider
 
-1. **New provider manifest file** -- unique `provider_id`, `manifest_version`, `solution_profiles[]` with `resulting_posture`, `signature`, pinned refs, optional `suggested_user_constraints`. Place the `*.json` in `CPM_CATALOGUE_DIR` (or under `internal/domain/provider/testdata/` for the next image bake).
-2. **New or updated Crypto Policy file** -- unique `id`, `name`, `version`, `required_posture`, `allowed_providers` including the new `provider_id`. Place it in the same catalogue directory (or `internal/domain/policy/testdata/` for image bake).
-3. **Validate locally:**
-  ```bash
-   cd cafe-crypto-policy-mgt
-   go test -tags dev ./...
-  ```
-4. **Restart CPM** (see [fast iteration](#fast-iteration-no-go-rebuild)), then verify APIs with a user JWT:
+1. **New provider manifest file** -- unique `provider_id`, `manifest_version`, `solution_profiles[]` with `resulting_posture`, `signature`, pinned refs, optional `suggested_user_constraints`. Add `provider_manifest_*.json` under `cafe-deploy/catalogs/cpm/files/`.
+2. **New or updated Crypto Policy file** -- unique `id`, `name`, `version`, `required_posture`, `allowed_providers` including the new `provider_id`. Add it in the same `files/` directory.
+3. **Pin the revision** -- write a new single line in `catalogs/cpm/REVISION`, set `CPM_CATALOGUE_REVISION` to that line (Compose env and Helm values), and update `catalogs/cpm/expected-ids.json`. For minikube, copy the same JSON bytes into cafe-expresso; do not edit a second copy by hand.
+4. **Recreate CPM** (see [fast iteration](#fast-iteration-edit-files-and-recreate)), then verify APIs with a user JWT:
   ```bash
    curl -fsS "${CPM_BASE}/api/cpm/v1/crypto-policies" \
      -H "Authorization: Bearer ${TOKEN}" \
@@ -796,14 +808,14 @@ When changing catalogue fixtures during development:
 
 | Symptom                                                      | Likely cause                                                                                            | Fix                                                                        |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Only one CP in UI picker                                     | Only one valid Crypto Policy JSON in `CPM_CATALOGUE_DIR`                                                | Drop a second CP `*.json` into the catalogue dir and **restart** CPM       |
+| Only one CP in UI picker                                     | Only one valid Crypto Policy JSON in `catalogs/cpm/files/`                                              | Drop a second CP `*.json` into `files/` and **recreate** CPM                |
 | Candidate rejected "incompatible.posture"                    | `required_posture` != `resulting_posture` on provider                                                   | Fix manifest `resulting_posture` or CP `required_posture`                  |
 | Empty `scan_compatible_providers` / chain codes              | Provider chain support narrower than wallet chains                                                      | Extend provider chain support or adjust CP `allowed_providers`             |
 | Persist returns 400 `CRYPTO_POLICY_PAYLOAD_INVALID`          | `schema_version` empty or not `v0.2`, missing `crypto_policy_id` / `user_constraints`, or unpinned refs | Use `cafe.crypto_policy.v0.2` with pinned snapshot                         |
 | Persist returns 400 `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` | Couche B KO after explore was scan-compatible                                                           | Adjust `user_constraints` or choose another provider                       |
 | Catalogue startup WARN posture orphanage                     | CP has no posture-matching allowed profile                                                              | Fix `allowed_providers` / profile `resulting_posture`                      |
-| CPM fails to start                                           | No valid CP or no valid provider left after load (or invalid JSON)                                      | Check startup skip/load logs; run `go test -tags dev ./...`                |
-| Catalogue unchanged after edit                               | Old process still running, or edit not on the mounted/`CPM_CATALOGUE_DIR` path                          | Restart CPM; for baked images without a volume, rebuild/redeploy the image |
+| CPM fails to start                                           | No mount, empty `files/` (bind created an empty host dir), or zero valid policies / zero valid manifests | Read the catalogue load error. There is no catalogue inside the image to fall back to |
+| Catalogue unchanged after edit                               | Old process still running, or the edit is not under the mounted `catalogs/cpm/files/`                   | Recreate CPM. Confirm `docker inspect` source is `catalogs/cpm/files`      |
 
 
 
@@ -971,8 +983,10 @@ Admins do **not** mutate user persisted policies through catalogue files. Catalo
 - [ ] Persist smoke uses `cafe.crypto_policy.v0.2` with `crypto_policy_id` + `user_constraints` and a CPM-assisted `accepted_provider_snapshot` with multi-chain `chain_support_used[]` (Nicetry refs pinned; no user `chain_id`)
 - [ ] Prometheus target `cafe-cpm-api` UP
 - [ ] Frontend built with `VITE_CPM_DATA_SOURCE=api` if testing real catalogue in UI (catalog table / networks come from CPM derived facts, not a FE provider mirror)
-- [ ] `go test -tags dev ./...` passed in `cafe-crypto-policy-mgt` before image publish
-- [ ] Provider manifest + Crypto Policy loaded: `CPM_CATALOGUE_DIR` points at the catalogue directory; startup logs show `cpm: catalogue loaded …` (and any catalogue signals)
+- [ ] `CPM_CATALOGUE_REVISION` equals the single line in `cafe-deploy/catalogs/cpm/REVISION` (Compose env and Helm values)
+- [ ] CPM mount source is `cafe-deploy/catalogs/cpm/files` (read-only on `/app/policy`). A catalogue JSON change did **not** require a new `cafe-cpm` image tag
+- [ ] Provider manifest + Crypto Policy loaded from that mount: startup logs show `cpm: catalogue loaded …` (and any catalogue signals). An empty directory, or zero valid policies / zero valid manifests, did not become healthy
+- [ ] `go test -tags dev ./...` in `cafe-crypto-policy-mgt` only when the **CPM binary** changes (`testdata/` is not the served catalogue)
 
 ---
 
