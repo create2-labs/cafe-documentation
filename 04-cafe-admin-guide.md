@@ -8,13 +8,13 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 - v0.10.0
   - Date: September 22nd, 2026
-  - Comments: **CFB-P17** — product catalogue facts include `allowed_provider_summaries` (catalog table); note greenfield empty-chain explore vs `runtime.no_scan_compatible`; persist snapshot is multi-chain (`chain_support_used[]`). `/providers*` remains admin diagnosis only. Link [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) / [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md). **Compose fast iteration:** document bind path relative to `compose/` (`../../cafe-crypto-policy-mgt/volumes/catalogs` as in `compose/25-cpm.yml`), empty-dir trap, and recreate after mount changes.
+  - Comments: **CFB-P17** — product catalogue facts include `allowed_provider_summaries` (catalog table); note greenfield empty-chain explore vs `runtime.no_scan_compatible`; persist snapshot is multi-chain (`chain_support_used[]`). `/providers`* remains admin diagnosis only. Link [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) / [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md). **Compose fast iteration:** document bind path relative to `compose/` (`../../cafe-crypto-policy-mgt/volumes/catalogs` as in `compose/25-cpm.yml`), empty-dir trap, and recreate after mount changes.
 - v0.9.0
   - Date: September 22nd, 2026
   - Comments: **CPM catalogue load** — document `CPM_CATALOGUE_DIR` (directory scan of `*.json` at boot; retired per-file `CPM_*_PATHS`). Add **fast iteration** for operators: drop JSON + restart (or Docker volume mount over `/app/policy`); no Go recompile required; image rebuild only to bake catalogue into a published tag.
 - v0.8.0
   - Date: September 21st, 2026
-  - Comments: **CFB-P8** — clarify product vs ops catalogue surfaces: SPA uses `GET /crypto-policies*` derived facts (`compatible_networks`); `GET /providers*` remains for admin diagnosis only. Link [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md).
+  - Comments: **CFB-P8** — clarify product vs ops catalogue surfaces: SPA uses `GET /crypto-policies`* derived facts (`compatible_networks`); `GET /providers*` remains for admin diagnosis only. Link [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md).
 - v0.7.0
   - Date: August 22nd, 2026
   - Comments: Rewrite **CPM catalogue administration** for two-layer amendement: Crypto Policies (`CPM_CRYPTO_POLICY_PATHS`) + provider manifests (`CPM_PROVIDER_MANIFEST_PATHS`); routes `/crypto-policies` + `/providers`; ADR §7.2.1 signals (catalogue family 1 + runtime family 2); Nicetry refs pinned (CPM-P7 done); diagnose curl uses explore v0.2 (`crypto_policy_id` + `policy_context`).
@@ -38,98 +38,112 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
   - Comments: Initial admin guide — environments, deploy pointers, health, CPM catalog administration, observability, smoke tests, and operator diagnosis workflows.
 
 
+
 ## ToC
 
 1. [CAFE Admin Guide](#cafe-admin-guide)
-   1. [Document Versioning](#document-versioning)
-   2. [ToC](#toc)
-   3. [Admin scope](#admin-scope)
-   4. [Environments and access](#environments-and-access)
-      1. [Two local deployments](#two-local-deployments)
-      2. [Typical bases](#typical-bases)
-      3. [SSH tunnel (non-public stacks)](#ssh-tunnel-non-public-stacks)
-      4. [Cloudflare Tunnel (home hosting)](#cloudflare-tunnel-home-hosting)
-      5. [Environment files (Compose)](#environment-files-compose)
-   5. [Deployment operations](#deployment-operations)
-      1. [Local Compose rebuild (cafe-deploy)](#local-compose-rebuild-cafe-deploy)
-      2. [Local minikube (cafe-expresso)](#local-minikube-cafe-expresso)
-      3. [Frontend CPM mode (admin-relevant)](#frontend-cpm-mode-admin-relevant)
-      4. [Staging / production](#staging--production)
-      5. [Production via Cloudflare Tunnel](#production-via-cloudflare-tunnel)
-      6. [Rollback](#rollback)
-   6. [Health checks and service status](#health-checks-and-service-status)
-      1. [Quick probes (Compose)](#quick-probes-compose)
-      2. [Quick probes (minikube)](#quick-probes-minikube)
-      3. [Compose status](#compose-status)
-      4. [minikube status](#minikube-status)
-      5. [Prometheus / Grafana (IMM-OPS-2)](#prometheus--grafana-imm-ops-2)
-   7. [PostgreSQL retention and capacity](#postgresql-retention-and-capacity)
-      1. [Why the database grows](#why-the-database-grows)
-      2. [Monitor size and row pressure](#monitor-size-and-row-pressure)
-      3. [Operator response (today)](#operator-response-today)
-      4. [Constraints before any purge](#constraints-before-any-purge)
-      5. [pgweb (manual Postgres UI)](#pgweb-manual-postgres-ui)
-   8. [Authentication and internal tokens (operator view)](#authentication-and-internal-tokens-operator-view)
-   9. [CPM catalogue administration](#cpm-catalogue-administration)
-      1. [Two layers (must stay consistent)](#two-layers-must-stay-consistent)
-      2. [Source files (repository)](#source-files-repository)
-      3. [Environment variables](#environment-variables)
-      4. [Fast iteration (no Go rebuild)](#fast-iteration-no-go-rebuild)
-      5. [Provider manifest and pin refs](#provider-manifest-and-pin-refs)
-      6. [RAZ fixtures -- dev catalog reset](#raz-fixtures----dev-catalog-reset)
-      7. [Procedure: add a second Capability Provider](#procedure-add-a-second-capability-provider)
-      8. [Common catalog mistakes](#common-catalog-mistakes)
-      9. [Persisted policies vs catalog](#persisted-policies-vs-catalog)
-   10. [Observability and incidents](#observability-and-incidents)
-       1. [CPM explore — no deployable candidate (REQ9)](#cpm-explore--no-deployable-candidate-req9)
-       2. [Integrated smoke (Discovery → CPM)](#integrated-smoke-discovery--cpm)
-   11. [Diagnose CPM explore (operator `curl`)](#diagnose-cpm-explore-operator-curl)
-   12. [User-support scenarios](#user-support-scenarios)
-   13. [Secrets and compliance](#secrets-and-compliance)
-   14. [Verification checklist (after catalog or CPM deploy)](#verification-checklist-after-catalog-or-cpm-deploy)
-   15. [Additional resources](#additional-resources)
+  1. [Document Versioning](#document-versioning)
+  2. [ToC](#toc)
+  3. [Admin scope](#admin-scope)
+  4. [Environments and access](#environments-and-access)
+    1. [Two local deployments](#two-local-deployments)
+    2. [Typical bases](#typical-bases)
+    3. [SSH tunnel (non-public stacks)](#ssh-tunnel-non-public-stacks)
+    4. [Cloudflare Tunnel (home hosting)](#cloudflare-tunnel-home-hosting)
+    5. [Environment files (Compose)](#environment-files-compose)
+  5. [Deployment operations](#deployment-operations)
+    1. [Local Compose rebuild (cafe-deploy)](#local-compose-rebuild-cafe-deploy)
+    2. [Local minikube (cafe-expresso)](#local-minikube-cafe-expresso)
+    3. [Frontend CPM mode (admin-relevant)](#frontend-cpm-mode-admin-relevant)
+    4. [Staging / production](#staging--production)
+    5. [Production via Cloudflare Tunnel](#production-via-cloudflare-tunnel)
+    6. [Rollback](#rollback)
+  6. [Health checks and service status](#health-checks-and-service-status)
+    1. [Quick probes (Compose)](#quick-probes-compose)
+    2. [Quick probes (minikube)](#quick-probes-minikube)
+    3. [Compose status](#compose-status)
+    4. [minikube status](#minikube-status)
+    5. [Prometheus / Grafana (IMM-OPS-2)](#prometheus--grafana-imm-ops-2)
+  7. [PostgreSQL retention and capacity](#postgresql-retention-and-capacity)
+    1. [Why the database grows](#why-the-database-grows)
+    2. [Monitor size and row pressure](#monitor-size-and-row-pressure)
+    3. [Operator response (today)](#operator-response-today)
+    4. [Constraints before any purge](#constraints-before-any-purge)
+    5. [pgweb (manual Postgres UI)](#pgweb-manual-postgres-ui)
+  8. [Authentication and internal tokens (operator view)](#authentication-and-internal-tokens-operator-view)
+  9. [CPM catalogue administration](#cpm-catalogue-administration)
+    1. [Two layers (must stay consistent)](#two-layers-must-stay-consistent)
+    2. [Source files (repository)](#source-files-repository)
+    3. [Environment variables](#environment-variables)
+    4. [Fast iteration (no Go rebuild)](#fast-iteration-no-go-rebuild)
+    5. [Provider manifest and pin refs](#provider-manifest-and-pin-refs)
+    6. [RAZ fixtures -- dev catalog reset](#raz-fixtures----dev-catalog-reset)
+    7. [Procedure: add a second Capability Provider](#procedure-add-a-second-capability-provider)
+    8. [Common catalog mistakes](#common-catalog-mistakes)
+    9. [Persisted policies vs catalog](#persisted-policies-vs-catalog)
+  10. [Observability and incidents](#observability-and-incidents)
+    1. [CPM explore — no deployable candidate (REQ9)](#cpm-explore--no-deployable-candidate-req9)
+    2. [Integrated smoke (Discovery → CPM)](#integrated-smoke-discovery--cpm)
+  11. [Diagnose CPM explore (operator](#diagnose-cpm-explore-operator-curl) `curl`[)](#diagnose-cpm-explore-operator-curl)
+  12. [User-support scenarios](#user-support-scenarios)
+  13. [Secrets and compliance](#secrets-and-compliance)
+  14. [Verification checklist (after catalog or CPM deploy)](#verification-checklist-after-catalog-or-cpm-deploy)
+  15. [Additional resources](#additional-resources)
 
 ---
 
+
+
 ## Admin scope
 
-| Area | This guide | Other reference |
-| --- | --- | --- |
-| Compose deploy, image tags, env templates | Overview + pointers | [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) |
-| Cloudflare Tunnel (selfhosted, no inbound ports) | Overview + commands | [cafe-deploy Cloudflare Tunnel](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#cloudflare-tunnel-home--no-inbound-ports), [CAFE_selfhosted.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/CAFE_selfhosted.md) |
-| minikube / Helm / kubectl | Overview + necessary commands | [cafe-expresso](https://github.com/create2-labs/cafe-expresso), [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md), [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md) |
-| HTTP API integration (`curl`, payloads) | Minimal (diagnosis only) | [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) |
-| CPM auth contract, error codes | Pointers | [docs/security/cpm-contract.md](./docs/security/cpm-contract.md) |
-| Explore rejection observability | Pointers + checklist | [docs/operations/cpm-explore-no-candidate-observability.md](./docs/operations/cpm-explore-no-candidate-observability.md) |
-| PostgreSQL retention, soft-delete growth, capacity | Monitoring + remediation | This guide § [PostgreSQL retention and capacity](#postgresql-retention-and-capacity) |
-| Product rules (W1–W8, immutability) | Summary | [functional-specifications.md](./functional-specifications.md) |
+
+| Area                                               | This guide                    | Other reference                                                                                                                                                                                                                                      |
+| -------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compose deploy, image tags, env templates          | Overview + pointers           | [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md)                                                                                                                                                                |
+| Cloudflare Tunnel (selfhosted, no inbound ports)   | Overview + commands           | [cafe-deploy Cloudflare Tunnel](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#cloudflare-tunnel-home--no-inbound-ports), [CAFE_selfhosted.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/CAFE_selfhosted.md)       |
+| minikube / Helm / kubectl                          | Overview + necessary commands | [cafe-expresso](https://github.com/create2-labs/cafe-expresso), `[docs/k8s.md](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)`, [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md) |
+| HTTP API integration (`curl`, payloads)            | Minimal (diagnosis only)      | [03-cafe-developer-guide.md](./03-cafe-developer-guide.md)                                                                                                                                                                                           |
+| CPM auth contract, error codes                     | Pointers                      | [docs/security/cpm-contract.md](./docs/security/cpm-contract.md)                                                                                                                                                                                     |
+| Explore rejection observability                    | Pointers + checklist          | [docs/operations/cpm-explore-no-candidate-observability.md](./docs/operations/cpm-explore-no-candidate-observability.md)                                                                                                                             |
+| PostgreSQL retention, soft-delete growth, capacity | Monitoring + remediation      | This guide § [PostgreSQL retention and capacity](#postgresql-retention-and-capacity)                                                                                                                                                                 |
+| Product rules (W1–W8, immutability)                | Summary                       | [functional-specifications.md](./functional-specifications.md)                                                                                                                                                                                       |
+
 
 **Out of scope:** application feature development, Terraform/Ansible authoring (see cafe-deploy / cafe-expresso), and future admin product UI (**IMM-OPS-3**).
 
 ---
 
 
+
 ## Environments and access
+
+
 
 ### Two local deployments
 
 Both remain valid. Do not drop Compose references while minikube P0 is the GitOps path under construction.
 
-| Deployment | Repo | Operator entry |
-| --- | --- | --- |
-| **Docker Compose** | `cafe-deploy` | `docker compose` + env files + NGINX edge |
-| **minikube P0** | `cafe-expresso` | Helm `cafe-platform` + ingress-nginx; full kubectl tutorial in [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md) |
+
+| Deployment         | Repo            | Operator entry                                                                                                                                      |
+| ------------------ | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Docker Compose** | `cafe-deploy`   | `docker compose` + env files + NGINX edge                                                                                                           |
+| **minikube P0**    | `cafe-expresso` | Helm `cafe-platform` + ingress-nginx; full kubectl tutorial in `[docs/k8s.md](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)` |
+
+
+
 
 ### Typical bases
 
-| Context | User / edge | Discovery (direct) | CPM (direct) |
-| --- | --- | --- | --- |
-| Local Compose | `http://localhost` or `https://localhost` | `http://localhost:8080` | `http://localhost:8082` |
-| **Local minikube** | **`http://localhost:8080`** (ingress port-forward) | port-forward `svc/cafe-discovery-backend 8080:8080` if needed | port-forward `svc/cafe-cpm 8082:8080` if needed |
-| Staging / prod (public VM) | `https://<host>` | Internal only | Internal only |
-| **Prod + Cloudflare Tunnel** | `https://cafe.create2-labs.fr` (TLS at Cloudflare) | Internal only; origin `http://127.0.0.1:8080` | Internal only |
 
-**minikube signup / signin (browser):** use **`http://localhost:8080/signup`** and **`http://localhost:8080/signin`**. Keep a terminal with:
+| Context                      | User / edge                                        | Discovery (direct)                                            | CPM (direct)                                    |
+| ---------------------------- | -------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
+| Local Compose                | `http://localhost` or `https://localhost`          | `http://localhost:8080`                                       | `http://localhost:8082`                         |
+| **Local minikube**           | `http://localhost:8080` (ingress port-forward)     | port-forward `svc/cafe-discovery-backend 8080:8080` if needed | port-forward `svc/cafe-cpm 8082:8080` if needed |
+| Staging / prod (public VM)   | `https://<host>`                                   | Internal only                                                 | Internal only                                   |
+| **Prod + Cloudflare Tunnel** | `https://cafe.create2-labs.fr` (TLS at Cloudflare) | Internal only; origin `http://127.0.0.1:8080`                 | Internal only                                   |
+
+
+**minikube signup / signin (browser):** use `http://localhost:8080/signup` and `http://localhost:8080/signin`. Keep a terminal with:
 
 ```bash
 kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8080:80
@@ -147,7 +161,7 @@ Public routes at the edge (same path contract on Compose NGINX and minikube Ingr
 - CPM deploy version: `/api/cpm/version` (public, no auth; **CPM-OPS-3**)
 - Platform status: `/status` (minikube PR5 — Prometheus `platform_up` via status-proxy; not the Prometheus UI)
 
-CPM **`GET /metrics`** is scraped inside the cluster / Docker network (not exposed through the public edge). See **Observability** below. Grafana is **not** in minikube P0 (phase 1b / PR10–PR11).
+CPM `GET /metrics` is scraped inside the cluster / Docker network (not exposed through the public edge). See **Observability** below. Grafana is **not** in minikube P0 (phase 1b / PR10–PR11).
 
 ### SSH tunnel (non-public stacks)
 
@@ -157,18 +171,22 @@ When services are not published on the public host, use the tunnel workflow docu
 
 Use Cloudflare Tunnel when CAFE runs on a **home** network and you must not open inbound 80/443 on the ISP box (double NAT / CGNAT friendly).
 
-| Piece | Role |
-| --- | --- |
-| Cloudflare DNS + Tunnel | Public HTTPS for `cafe.create2-labs.fr` |
-| `cloudflared` on the host | Outbound tunnel to origin `http://localhost:8080` |
+
+| Piece                            | Role                                               |
+| -------------------------------- | -------------------------------------------------- |
+| Cloudflare DNS + Tunnel          | Public HTTPS for `cafe.create2-labs.fr`            |
+| `cloudflared` on the host        | Outbound tunnel to origin `http://localhost:8080`  |
 | `docker-compose.prod-tunnel.yml` | Same prod images; NGINX HTTP edge on loopback only |
 
-Do **not** publish only the frontend container: `/api/*` still requires the NGINX edge. Named tunnels reject self-signed HTTPS origins unless TLS verify is disabled; the tunnel compose path uses plain HTTP instead.
+
+Do **not** publish only the frontend container: `/api/`* still requires the NGINX edge. Named tunnels reject self-signed HTTPS origins unless TLS verify is disabled; the tunnel compose path uses plain HTTP instead.
 
 Canonical operator docs:
 
 - Quick path: [cafe-deploy README — Cloudflare Tunnel](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#cloudflare-tunnel-home--no-inbound-ports)
 - Full home guide (OpenWrt, DNS, firewall): [CAFE_selfhosted.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/CAFE_selfhosted.md)
+
+
 
 ### Environment files (Compose)
 
@@ -183,11 +201,15 @@ docker compose -f docker-compose.dev.yml --env-file env/dev.local.env up -d
 
 Key version pins (examples): `DISCOVERY_VERSION`, `FRONTEND_VERSION`, `CPM_VERSION`, `NGINX_VERSION`. Image tags are the primary rollback lever.
 
-On **minikube**, secrets are a Kubernetes Secret (`cafe-platform-secrets`) — see [cafe-expresso `docs/secrets.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/secrets.md) and deploy commands below (never commit plaintext).
+On **minikube**, secrets are a Kubernetes Secret (`cafe-platform-secrets`) — see [cafe-expresso](https://github.com/create2-labs/cafe-expresso/blob/main/docs/secrets.md) `docs/secrets.md` and deploy commands below (never commit plaintext).
 
 ---
 
+
+
 ## Deployment operations
+
+
 
 ### Local Compose rebuild (cafe-deploy)
 
@@ -202,7 +224,7 @@ This rebuilds sibling repos (`cafe-discovery`, `cafe-frontend`, `cafe-crypto-pol
 
 ### Local minikube (cafe-expresso)
 
-Necessary and sufficient commands (from [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)):
+Necessary and sufficient commands (from `[docs/k8s.md](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)`):
 
 ```bash
 cd cafe-expresso
@@ -248,14 +270,16 @@ minikube stop                                  # stop cluster
 # minikube delete                              # destructive
 ```
 
-RBAC / Argo CD (PR7–PR8): ServiceAccounts, AppProject without `Secret`/`Namespace` sync — see cafe-expresso [`docs/security-rbac.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/security-rbac.md) and `./scripts/smoke/pr8-rbac-argocd.sh`.
+RBAC / Argo CD (PR7–PR8): ServiceAccounts, AppProject without `Secret`/`Namespace` sync — see cafe-expresso `[docs/security-rbac.md](https://github.com/create2-labs/cafe-expresso/blob/main/docs/security-rbac.md)` and `./scripts/smoke/pr8-rbac-argocd.sh`.
 
 ### Frontend CPM mode (admin-relevant)
 
-| Variable | Effect |
-| --- | --- |
-| `VITE_CPM_DATA_SOURCE=api` | CPM page calls real CPM HTTP (required to test catalog, explore, persist) |
-| `VITE_CPM_DATA_SOURCE=mock` | Fixtures only — no backend catalog |
+
+| Variable                    | Effect                                                                    |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `VITE_CPM_DATA_SOURCE=api`  | CPM page calls real CPM HTTP (required to test catalog, explore, persist) |
+| `VITE_CPM_DATA_SOURCE=mock` | Fixtures only — no backend catalog                                        |
+
 
 Set in `env/dev.local.env` before `redeployalldev.sh` (Compose). Release / minikube images typically ship with `api`.
 
@@ -304,7 +328,11 @@ Do not stack `overrides/prod.yml` with the tunnel override. Grafana / Prometheus
 
 ---
 
+
+
 ## Health checks and service status
+
+
 
 ### Quick probes (Compose)
 
@@ -318,6 +346,8 @@ curl -fsS http://localhost:8082/version        # CPM version direct
 curl -kfsS https://localhost/api/cpm/healthz   # CPM via NGINX (prod-like path)
 curl -kfsS https://localhost/api/cpm/version   # CPM version via NGINX (prod-like path)
 ```
+
+
 
 ### Quick probes (minikube)
 
@@ -352,6 +382,8 @@ docker logs cafe-cpm-dev --tail 100
 docker logs cafe-discovery-dev --tail 100
 ```
 
+
+
 ### minikube status
 
 ```bash
@@ -361,6 +393,8 @@ kubectl -n "$NS" logs -f deployment/cafe-discovery-backend
 kubectl -n "$NS" describe pod <name>
 kubectl -n "$NS" get events --sort-by='.lastTimestamp' | tail -20
 ```
+
+
 
 ### Prometheus / Grafana (IMM-OPS-2)
 
@@ -379,6 +413,8 @@ kubectl -n "$NS" get events --sort-by='.lastTimestamp' | tail -20
 
 ---
 
+
+
 ## PostgreSQL retention and capacity
 
 CAFE stores durable scan and Crypto Policy (CP) state in a single **PostgreSQL** instance (`cafe-postgres-${ENV}` in compose). **There is no automated compaction job in P0** — operators must plan for monotonic growth and monitor disk and backup size.
@@ -387,12 +423,14 @@ Product intent ([functional-specifications.md — Retention](./functional-specif
 
 ### Why the database grows
 
-| Source | Tables | Behavior |
-| --- | --- | --- |
+
+| Source                      | Tables                                                | Behavior                                                                                                             |
+| --------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | User delete (scan / policy) | `scan_results`, `tls_scan_results`, `crypto_policies` | Row kept with `deleted_at` set — hidden from API lists and W1/W3 guards (partial indexes `WHERE deleted_at IS NULL`) |
-| Policy replace (NB1) | `crypto_policies` | DELETE (soft) then new signed persist — not atomic; W1 unique partial on active rows |
-| Persist conflict / retry | `crypto_policies.payload_sha256` | **409** `POLICY_ALREADY_EXISTS` — reconcile via GET + hash compare (no `draft_persist_state`) |
-| Plan quota ledger (IMM-6b) | `scan_usage_events` | **Append-only** — `used` is monotonic; soft-deleting a scan lowers `visible` but **does not** remove ledger rows |
+| Policy replace (NB1)        | `crypto_policies`                                     | DELETE (soft) then new signed persist — not atomic; W1 unique partial on active rows                                 |
+| Persist conflict / retry    | `crypto_policies.payload_sha256`                      | **409** `POLICY_ALREADY_EXISTS` — reconcile via GET + hash compare (no `draft_persist_state`)                        |
+| Plan quota ledger (IMM-6b)  | `scan_usage_events`                                   | **Append-only** — `used` is monotonic; soft-deleting a scan lowers `visible` but **does not** remove ledger rows     |
+
 
 Hot queries stay fast thanks to partial indexes, but **disk and backups grow without bound** until a retention or purge policy is applied. Acceptable for P0/dev; track before long-lived staging or production scale.
 
@@ -452,12 +490,14 @@ SELECT 'scan_usage_events', COUNT(*), 0 FROM scan_usage_events;"
 
 ### Operator response (today)
 
-| Situation | Action |
-| --- | --- |
-| Approaching disk limit | Expand volume; shorten backup retention if policy allows; run monitoring queries above to find dominant tables |
-| High `dead_rows` after bulk activity | `VACUUM (ANALYZE)` on affected tables during a maintenance window (reclaims space from updated/deleted tuples; does not remove soft-deleted business rows) |
-| Staging / dev cleanup of test data | **Hard-delete** old soft-deleted rows only after dry-run `SELECT` and sign-off — see constraints below. **Never** ad-hoc purge in production without product/legal approval |
-| No automated purge yet | Planned: retention windows, scheduled job, account-deletion cascade (RGPD). Track [cafe-deploy TODO — Postgres retention](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md#postgres-retention--cp--scan-tables-grow-without-bound-soft-delete) |
+
+| Situation                            | Action                                                                                                                                                                                                                                                      |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approaching disk limit               | Expand volume; shorten backup retention if policy allows; run monitoring queries above to find dominant tables                                                                                                                                              |
+| High `dead_rows` after bulk activity | `VACUUM (ANALYZE)` on affected tables during a maintenance window (reclaims space from updated/deleted tuples; does not remove soft-deleted business rows)                                                                                                  |
+| Staging / dev cleanup of test data   | **Hard-delete** old soft-deleted rows only after dry-run `SELECT` and sign-off — see constraints below. **Never** ad-hoc purge in production without product/legal approval                                                                                 |
+| No automated purge yet               | Planned: retention windows, scheduled job, account-deletion cascade (RGPD). Track [cafe-deploy TODO — Postgres retention](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md#postgres-retention--cp--scan-tables-grow-without-bound-soft-delete) |
+
 
 **Staging-only example** — preview rows eligible for hard-delete (adjust interval and environment):
 
@@ -491,11 +531,13 @@ Do **not** bulk-delete from `scan_usage_events` to “free space” — that bre
 - **Backups:** smaller live DB does not shrink existing backup objects — align backup retention with legal/audit policy.
 - **Production:** no documented automated purge path yet — coordinate with product and `cafe-persistence` before any hard-delete policy.
 
+
+
 ### pgweb (manual Postgres UI)
 
 Operator-only tool — **not** in the Helm chart / Compose stack. Same idea as starting `sosedoff/pgweb` by hand on `cafe-network` in cafe-deploy.
 
-**minikube** (from [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)):
+**minikube** (from `[docs/k8s.md](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)`):
 
 ```bash
 export NS=cafe-platform
@@ -509,7 +551,7 @@ docker run --rm -p 8081:8081 \
   --url "postgres://cafe:${PW}@host.docker.internal:5432/cafe?sslmode=disable"
 ```
 
-UI: http://127.0.0.1:8081 — user/DB `cafe`/`cafe`.
+UI: [http://127.0.0.1:8081](http://127.0.0.1:8081) — user/DB `cafe`/`cafe`.
 
 With Calico NetworkPolicies, an in-cluster pgweb pod must use `persistence` (or `discoveryBackend`) component labels — see k8s.md Option B.
 
@@ -517,24 +559,28 @@ With Calico NetworkPolicies, an in-cluster pgweb pod must use `persistence` (or 
 
 ---
 
+
+
 ## Authentication and internal tokens (operator view)
 
 CPM business routes require a **Discovery session JWT**. There is no separate CPM user login.
 
-| Variable | Service | Purpose |
-| --- | --- | --- |
-| `CPM_AUTH_REQUIRED` | CPM | When `true`, anonymous business API access returns 401 |
-| `CAFE_SESSION_JWT_VALIDATION_URL` | CPM → Discovery | Session validation endpoint |
-| `CAFE_SESSION_JWT_VALIDATION_SERVICE_TOKEN` | CPM → Discovery | Service auth for validation calls |
-| `CAFE_SCAN_AUTHORIZATION_URL` | CPM → Discovery | Scan visibility checks (W2, W7, etc.) |
-| `CAFE_SCAN_AUTHORIZATION_SERVICE_TOKEN` | CPM → Discovery | Service auth for scan authorization |
-| `CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN` | Discovery ↔ CPM | Scan delete policy reference check |
+
+| Variable                                       | Service         | Purpose                                                |
+| ---------------------------------------------- | --------------- | ------------------------------------------------------ |
+| `CPM_AUTH_REQUIRED`                            | CPM             | When `true`, anonymous business API access returns 401 |
+| `CAFE_SESSION_JWT_VALIDATION_URL`              | CPM → Discovery | Session validation endpoint                            |
+| `CAFE_SESSION_JWT_VALIDATION_SERVICE_TOKEN`    | CPM → Discovery | Service auth for validation calls                      |
+| `CAFE_SCAN_AUTHORIZATION_URL`                  | CPM → Discovery | Scan visibility checks (W2, W7, etc.)                  |
+| `CAFE_SCAN_AUTHORIZATION_SERVICE_TOKEN`        | CPM → Discovery | Service auth for scan authorization                    |
+| `CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN` | Discovery ↔ CPM | Scan delete policy reference check                     |
+
 
 Tokens must match across Discovery and CPM compose env. Mismatch symptoms: CPM `503` on explore, scan delete `503 POLICY_REFERENCE_CHECK_UNAVAILABLE`, or persistent `401`/`403` on CPM while Discovery works.
 
 Full route classification: [docs/security/cpm-contract.md](./docs/security/cpm-contract.md).
 
-**Admin `curl` diagnosis** uses a normal user JWT (sign-in) — same as the developer guide. Service tokens are for inter-service calls only.
+**Admin** `curl` **diagnosis** uses a normal user JWT (sign-in) — same as the developer guide. Service tokens are for inter-service calls only.
 
 On **minikube**, sign up / sign in via the edge:
 
@@ -545,9 +591,11 @@ curl -sS -X POST "${EDGE_BASE}/api/auth/signup" \
   -d '{"email":"admin-test@example.com","password":"TestPass123!","confirm_password":"TestPass123!","turnstile_token":"dev-pass"}'
 ```
 
-Browser: **`http://localhost:8080/signup`** / **`http://localhost:8080/signin`**.
+Browser: `http://localhost:8080/signup` / `http://localhost:8080/signin`.
 
 ---
+
+
 
 ## CPM catalogue administration
 
@@ -569,10 +617,12 @@ crypto_policy_*.json                -> Crypto Policy intention: required_posture
 >
 > **Also retired:** per-file `CPM_CRYPTO_POLICY_PATHS` and `CPM_PROVIDER_MANIFEST_PATHS`. CPM now scans a single directory (`CPM_CATALOGUE_DIR`).
 
-| Layer | API | What operators configure |
-| --- | --- | --- |
-| Provider manifests | `GET /api/cpm/v1/providers` (files under `CPM_CATALOGUE_DIR`) | `ProviderManifest` files per Capability Provider — **ops / admin / debug** (not the product SPA catalogue contract) |
-| Crypto Policies | `GET /api/cpm/v1/crypto-policies` (files under `CPM_CATALOGUE_DIR`) | One file per CP (`required_posture` + `allowed_providers`); API also returns CPM-derived **`compatible_networks`** (union) and **`allowed_provider_summaries`** (per-provider signature + networks) for the product catalog UI |
+
+| Layer              | API                                                                 | What operators configure                                                                                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Provider manifests | `GET /api/cpm/v1/providers` (files under `CPM_CATALOGUE_DIR`)       | `ProviderManifest` files per Capability Provider — **ops / admin / debug** (not the product SPA catalogue contract)                                                                                                    |
+| Crypto Policies    | `GET /api/cpm/v1/crypto-policies` (files under `CPM_CATALOGUE_DIR`) | One file per CP (`required_posture` + `allowed_providers`); API also returns CPM-derived `compatible_networks` (union) and `allowed_provider_summaries` (per-provider signature + networks) for the product catalog UI |
+
 
 **Critical rule:** a Crypto Policy is **intention** (`required_posture` + `allowed_providers`) plus **derived display facts** CPM computes at read time (`compatible_networks`, `allowed_provider_summaries`). There is no `default_selection`. Explore (**couche A**) resolves providers from `allowed_providers` against loaded manifests and returns **scan-compatible** providers — including **greenfield** scans with empty observed chains (chain gate skipped). User constraints (**couche B**) apply at persist (and as an indicative UI filter), not as catalogue rows. Persist pins a multi-chain `chain_support_used[]` from the chosen profile (no user chain picker). The product frontend must **not** join `GET /providers` to rebuild catalog networks, the provider table, Expected result, or the snapshot — see [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md). Admins may still `curl` `/providers` when diagnosing coverage gaps.
 
@@ -595,9 +645,11 @@ In the **CPM Docker image**, both `testdata/` trees are copied **flat** into `/a
 
 ### Environment variables
 
-| Variable | Default (image) | Meaning |
-| --- | --- | --- |
-| `CPM_CATALOGUE_DIR` | `/app/policy` | Directory of catalogue `*.json` files. At boot CPM classifies each file as a **Crypto Policy** or a **ProviderManifest**. |
+
+| Variable            | Default (image) | Meaning                                                                                                                   |
+| ------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `CPM_CATALOGUE_DIR` | `/app/policy`   | Directory of catalogue `*.json` files. At boot CPM classifies each file as a **Crypto Policy** or a **ProviderManifest**. |
+
 
 Example (local `go run` with a flat catalogue dir):
 
@@ -617,13 +669,15 @@ go run ./cmd/cafe-cpm
 
 Catalogue content is data, not compiled code. Operators can iterate without `go build` or a full image rebuild.
 
-| Goal | What to do | Restart? | Rebuild image? |
-| --- | --- | --- | --- |
-| Try a new CP / provider in local `go run` | Drop JSON into `CPM_CATALOGUE_DIR` (flat dir) | Yes (process) | No |
-| Try a new CP / provider in Compose/dev container | Mount a host catalogue dir over `/app/policy` (see below), drop JSON on the host | Yes (`docker compose restart cafe-cpm`, or **recreate** if the volume mount itself changed) | No |
-| Ship catalogue in a released image tag | Add JSON under repo `testdata/`, rebuild/push `oleglod/cafe-cpm` | Yes (redeploy) | **Yes** |
 
-**Compose volume mount (local/dev — as in `compose/25-cpm.yml`):**
+| Goal                                             | What to do                                                                       | Restart?                                                                                    | Rebuild image? |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------- |
+| Try a new CP / provider in local `go run`        | Drop JSON into `CPM_CATALOGUE_DIR` (flat dir)                                    | Yes (process)                                                                               | No             |
+| Try a new CP / provider in Compose/dev container | Mount a host catalogue dir over `/app/policy` (see below), drop JSON on the host | Yes (`docker compose restart cafe-cpm`, or **recreate** if the volume mount itself changed) | No             |
+| Ship catalogue in a released image tag           | Add JSON under repo `testdata/`, rebuild/push `oleglod/cafe-cpm`                 | Yes (redeploy)                                                                              | **Yes**        |
+
+
+**Compose volume mount (local/dev — as in** `compose/25-cpm.yml`**):**
 
 Relative bind paths in `compose/*.yml` are resolved from the **fragment file directory** (`compose/`), not from the repo root. Use `../../` to reach a sibling repo under `create2-labs/`. Do **not** use this mutable host mount for production catalogue without review.
 
@@ -634,11 +688,11 @@ services:
     environment:
       CPM_CATALOGUE_DIR: /app/policy
     volumes:
-      # compose/ → ../../ = create2-labs/
-      - ../../cafe-crypto-policy-mgt/volumes/catalogs:/app/policy:ro
+      # path must be relative to this file one
+      - ../volumes/catalogs:/app/policy:ro
 ```
 
-Prepare the host directory as a **flat** merge (same layout as the image). Prefer `crypto_policy_*.json` / `provider_manifest_*.json` so test-only `invalid_*` fixtures are not copied into the live catalogue:
+Prepare the host directory as a **flat** merge (same layout as the image). Prefer `crypto_policy_*.json` / `provider_manifest_*.json` so test-only `invalid_`* fixtures are not copied into the live catalogue:
 
 ```bash
 mkdir -p cafe-crypto-policy-mgt/volumes/catalogs
@@ -660,22 +714,25 @@ After recreate/restart, confirm load in logs (`cpm: catalogue loaded crypto_poli
 ### Provider manifest and pin refs
 
 A `ProviderManifest` declares one or more `SolutionProfile`(s), each with:
+
 - `solution_profile_id` -- stable identifier
 - `resulting_posture` -- what the provider achieves (e.g. `hybrid`)
 - `signature` -- `scheme` + `family` (e.g. ERC-4337 + ML-DSA)
 - `suggested_user_constraints` -- indicative defaults for the UI constraints panel
 - `refs` -- commit/version pointers for pinned verification
 
-**`unpinned_pending_fixture`** is rejected by the persist gate. The shipped Nicetry fixture refs are **pinned** (**CPM-P7** done). Explore and signed persist work with the pinned fixture; any snapshot that still carries `unpinned_pending_fixture` (or empty commit/version) fails the gate.
+`unpinned_pending_fixture` is rejected by the persist gate. The shipped Nicetry fixture refs are **pinned** (**CPM-P7** done). Explore and signed persist work with the pinned fixture; any snapshot that still carries `unpinned_pending_fixture` (or empty commit/version) fails the gate.
 
 ### Catalogue startup signals (ADR §7.2.1 family 1 / CPM-P11a)
 
 After loading Crypto Policies and manifests, CPM emits structured **signals** (prefer this term over “alarmes” alone):
 
-| Severity | When | Counter (optional) |
-| --- | --- | --- |
-| `WARN catalogue: posture orphanage …` | CP has empty `allowed_providers` or no allowed profile with `resulting_posture == required_posture` | `cpm_catalogue_posture_orphan_total` |
-| `ERROR catalogue: malformed suggested_user_constraints …` | Profile suggestions contradict `constraints` / signature; profile marked `Erroneous` | `cpm_catalogue_malformed_manifest_total` |
+
+| Severity                                                  | When                                                                                                | Counter (optional)                       |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `WARN catalogue: posture orphanage …`                     | CP has empty `allowed_providers` or no allowed profile with `resulting_posture == required_posture` | `cpm_catalogue_posture_orphan_total`     |
+| `ERROR catalogue: malformed suggested_user_constraints …` | Profile suggestions contradict `constraints` / signature; profile marked `Erroneous`                | `cpm_catalogue_malformed_manifest_total` |
+
 
 These fire at **startup/load**, not per scan. Chain `planned` / wallet type are **not** part of the static posture-orphan check.
 
@@ -683,10 +740,12 @@ These fire at **startup/load**, not per scan. Chain `planned` / wallet type are 
 
 Contextual to a scan + Crypto Policy (+ user constraints). Distinct from catalogue startup:
 
-| Signal | When | Log / metric |
-| --- | --- | --- |
-| No scan-compatible | Explore HTTP 200, empty `scan_compatible_providers`, non-empty `rejected_candidates` (**not** greenfield empty `chain_ids` alone) | `event=cpm.explore.no_deployable_candidate` + `adr_signal=runtime.no_scan_compatible` ; `cpm_explore_no_deployable_candidate_total` |
-| Couche B KO | Persist `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` | `event=cpm.persist.user_constraints_incompatible` + `adr_signal=runtime.no_provider_after_user_constraints` ; `cpm_persist_user_constraints_incompatible_total` |
+
+| Signal             | When                                                                                                                              | Log / metric                                                                                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No scan-compatible | Explore HTTP 200, empty `scan_compatible_providers`, non-empty `rejected_candidates` (**not** greenfield empty `chain_ids` alone) | `event=cpm.explore.no_deployable_candidate` + `adr_signal=runtime.no_scan_compatible` ; `cpm_explore_no_deployable_candidate_total`                             |
+| Couche B KO        | Persist `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`                                                                                  | `event=cpm.persist.user_constraints_incompatible` + `adr_signal=runtime.no_provider_after_user_constraints` ; `cpm_persist_user_constraints_incompatible_total` |
+
 
 **Greenfield:** empty observed chains skip the couche A chain gate — expect eligible candidates, not this “no scan-compatible” signal, for that motive alone.
 
@@ -699,30 +758,27 @@ When changing catalogue fixtures during development:
 1. Stop CPM (`docker stop cafe-cpm-dev` or equivalent).
 2. Replace fixture files in the catalogue directory (Crypto Policy and/or provider manifest under `CPM_CATALOGUE_DIR`, or the host mount used in [fast iteration](#fast-iteration-no-go-rebuild)).
 3. **RAZ DB drafts**: delete in-progress drafts that reference the old catalogue IDs (or run full dev DB wipe if safe):
-   ```bash
+  ```bash
    # Soft delete orphaned drafts (dev only -- never in production without sign-off)
    docker exec -e PGPASSWORD=cafe cafe-postgres-dev psql -U cafe -d cafe \
      -c "UPDATE crypto_policies SET deleted_at=NOW() WHERE deleted_at IS NULL;"
-   ```
+  ```
 4. **Restart** CPM (process or container). No Go recompile. Rebuild the image only if you are publishing a baked catalogue tag.
 5. Verify via `GET /api/cpm/v1/crypto-policies` and `GET /api/cpm/v1/providers`.
+
+
 
 ### Procedure: add a second Capability Provider
 
 1. **New provider manifest file** -- unique `provider_id`, `manifest_version`, `solution_profiles[]` with `resulting_posture`, `signature`, pinned refs, optional `suggested_user_constraints`. Place the `*.json` in `CPM_CATALOGUE_DIR` (or under `internal/domain/provider/testdata/` for the next image bake).
-
 2. **New or updated Crypto Policy file** -- unique `id`, `name`, `version`, `required_posture`, `allowed_providers` including the new `provider_id`. Place it in the same catalogue directory (or `internal/domain/policy/testdata/` for image bake).
-
 3. **Validate locally:**
-
-   ```bash
+  ```bash
    cd cafe-crypto-policy-mgt
    go test -tags dev ./...
-   ```
-
+  ```
 4. **Restart CPM** (see [fast iteration](#fast-iteration-no-go-rebuild)), then verify APIs with a user JWT:
-
-   ```bash
+  ```bash
    curl -fsS "${CPM_BASE}/api/cpm/v1/crypto-policies" \
      -H "Authorization: Bearer ${TOKEN}" \
      | jq '[.items[] | {id, name, required_posture, allowed_providers}]'
@@ -730,22 +786,27 @@ When changing catalogue fixtures during development:
    curl -fsS "${CPM_BASE}/api/cpm/v1/providers" \
      -H "Authorization: Bearer ${TOKEN}" \
      | jq '[.items[] | {provider_id, manifest_version}]'
-   ```
-
+  ```
 5. **Verify explore** for a real wallet scan (see **Diagnose CPM explore** below). The new provider should appear in `scan_compatible_providers` (or in `rejected_candidates` with an explicit code).
+
+
 
 ### Common catalogue mistakes
 
-| Symptom | Likely cause | Fix |
-| --- | --- | --- |
-| Only one CP in UI picker | Only one valid Crypto Policy JSON in `CPM_CATALOGUE_DIR` | Drop a second CP `*.json` into the catalogue dir and **restart** CPM |
-| Candidate rejected "incompatible.posture" | `required_posture` != `resulting_posture` on provider | Fix manifest `resulting_posture` or CP `required_posture` |
-| Empty `scan_compatible_providers` / chain codes | Provider chain support narrower than wallet chains | Extend provider chain support or adjust CP `allowed_providers` |
-| Persist returns 400 `CRYPTO_POLICY_PAYLOAD_INVALID` | `schema_version` empty or not `v0.2`, missing `crypto_policy_id` / `user_constraints`, or unpinned refs | Use `cafe.crypto_policy.v0.2` with pinned snapshot |
-| Persist returns 400 `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` | Couche B KO after explore was scan-compatible | Adjust `user_constraints` or choose another provider |
-| Catalogue startup WARN posture orphanage | CP has no posture-matching allowed profile | Fix `allowed_providers` / profile `resulting_posture` |
-| CPM fails to start | No valid CP or no valid provider left after load (or invalid JSON) | Check startup skip/load logs; run `go test -tags dev ./...` |
-| Catalogue unchanged after edit | Old process still running, or edit not on the mounted/`CPM_CATALOGUE_DIR` path | Restart CPM; for baked images without a volume, rebuild/redeploy the image |
+
+| Symptom                                                      | Likely cause                                                                                            | Fix                                                                        |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Only one CP in UI picker                                     | Only one valid Crypto Policy JSON in `CPM_CATALOGUE_DIR`                                                | Drop a second CP `*.json` into the catalogue dir and **restart** CPM       |
+| Candidate rejected "incompatible.posture"                    | `required_posture` != `resulting_posture` on provider                                                   | Fix manifest `resulting_posture` or CP `required_posture`                  |
+| Empty `scan_compatible_providers` / chain codes              | Provider chain support narrower than wallet chains                                                      | Extend provider chain support or adjust CP `allowed_providers`             |
+| Persist returns 400 `CRYPTO_POLICY_PAYLOAD_INVALID`          | `schema_version` empty or not `v0.2`, missing `crypto_policy_id` / `user_constraints`, or unpinned refs | Use `cafe.crypto_policy.v0.2` with pinned snapshot                         |
+| Persist returns 400 `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` | Couche B KO after explore was scan-compatible                                                           | Adjust `user_constraints` or choose another provider                       |
+| Catalogue startup WARN posture orphanage                     | CP has no posture-matching allowed profile                                                              | Fix `allowed_providers` / profile `resulting_posture`                      |
+| CPM fails to start                                           | No valid CP or no valid provider left after load (or invalid JSON)                                      | Check startup skip/load logs; run `go test -tags dev ./...`                |
+| Catalogue unchanged after edit                               | Old process still running, or edit not on the mounted/`CPM_CATALOGUE_DIR` path                          | Restart CPM; for baked images without a volume, rebuild/redeploy the image |
+
+
+
 
 ### Persisted policies vs catalogue
 
@@ -753,7 +814,11 @@ When changing catalogue fixtures during development:
 
 ---
 
+
+
 ## Observability and incidents
+
+
 
 ### CPM explore — no scan-compatible provider (REQ9)
 
@@ -763,15 +828,17 @@ When users see “no policy applies” but HTTP is healthy, use the dedicated ru
 
 Summary for admins:
 
-| Signal | Where |
-| --- | --- |
-| User-facing explanation | SPA `CpmExploreRejectionBanner` (REQ8) |
-| Runtime signal (family 2) | `cpm.explore.no_deployable_candidate` + `adr_signal=runtime.no_scan_compatible` |
-| Structured log | `docker logs cafe-cpm-*` |
-| Counter | `cpm_explore_no_deployable_candidate_total` on `GET /metrics` |
-| Couche B (separate) | `cpm.persist.user_constraints_incompatible` + `adr_signal=runtime.no_provider_after_user_constraints` |
-| Dashboard | Grafana **CAFE - CPM Explore Rejections** |
-| Alert | `CpmExploreIncompatibleChainScopeSustained` (sustained chain-scope style rejections) |
+
+| Signal                    | Where                                                                                                 |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| User-facing explanation   | SPA `CpmExploreRejectionBanner` (REQ8)                                                                |
+| Runtime signal (family 2) | `cpm.explore.no_deployable_candidate` + `adr_signal=runtime.no_scan_compatible`                       |
+| Structured log            | `docker logs cafe-cpm-*`                                                                              |
+| Counter                   | `cpm_explore_no_deployable_candidate_total` on `GET /metrics`                                         |
+| Couche B (separate)       | `cpm.persist.user_constraints_incompatible` + `adr_signal=runtime.no_provider_after_user_constraints` |
+| Dashboard                 | Grafana **CAFE - CPM Explore Rejections**                                                             |
+| Alert                     | `CpmExploreIncompatibleChainScopeSustained` (sustained chain-scope style rejections)                  |
+
 
 **Privacy:** never put `scan_id`, wallet address, or per-chain ids on Prometheus labels. Use logs or API explore JSON for investigation.
 
@@ -795,6 +862,8 @@ CPM_BASE='http://localhost:8082' \
 CPM-only observability smoke: `cafe-crypto-policy-mgt/scripts/test-imm-ops-1.sh`.
 
 ---
+
+
 
 ## Diagnose CPM explore (operator `curl`)
 
@@ -855,30 +924,38 @@ Compare wallet `chain_ids` from Discovery detail with provider chain support fro
 
 ---
 
+
+
 ## User-support scenarios
 
-| User report | Check first | Admin action |
-| --- | --- | --- |
-| “Cannot signup / empty `users` table” (minikube) | Browser URL must be **`http://localhost:8080`** with ingress port-forward; Network tab `POST /api/auth/signup` | If **405**, user hit `cafe-frontend` alone — switch to ingress. Turnstile dummy token `XXXX.DUMMY.TOKEN.XXXX` is OK in dev |
-| “No wallet scan on CPM page” | Discovery scans exist, scan `completed` | W7 gate — newest scan must be completed; see functional specs |
-| “Policy greyed out / incompatible” | Explore rejection code | Catalogue CP `allowed_providers` + provider chain/posture vs scan |
-| “Cannot delete scan” | `409 SCAN_REFERENCED_BY_POLICY` | User must delete or rebind CPM policy first (W3/W4) |
-| “CPM page errors / session” | Browser network tab on `/api/cpm/v1` | CPM auth env, Discovery session validation URL |
-| “Persist failed” / constraints incompatible | Wallet challenge + signed `POST /policies` + `user_constraints` | [CP-PERSIST runbook](./docs/security/cp-persist-v1.md); couche B signal if `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` |
-| Scan not latest on explore/persist | W2 gate | Re-select latest completed scan; **422** `SCAN_NOT_LATEST` |
+
+| User report                                      | Check first                                                                                                | Admin action                                                                                                               |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| “Cannot signup / empty `users` table” (minikube) | Browser URL must be `http://localhost:8080` with ingress port-forward; Network tab `POST /api/auth/signup` | If **405**, user hit `cafe-frontend` alone — switch to ingress. Turnstile dummy token `XXXX.DUMMY.TOKEN.XXXX` is OK in dev |
+| “No wallet scan on CPM page”                     | Discovery scans exist, scan `completed`                                                                    | W7 gate — newest scan must be completed; see functional specs                                                              |
+| “Policy greyed out / incompatible”               | Explore rejection code                                                                                     | Catalogue CP `allowed_providers` + provider chain/posture vs scan                                                          |
+| “Cannot delete scan”                             | `409 SCAN_REFERENCED_BY_POLICY`                                                                            | User must delete or rebind CPM policy first (W3/W4)                                                                        |
+| “CPM page errors / session”                      | Browser network tab on `/api/cpm/v1`                                                                       | CPM auth env, Discovery session validation URL                                                                             |
+| “Persist failed” / constraints incompatible      | Wallet challenge + signed `POST /policies` + `user_constraints`                                            | [CP-PERSIST runbook](./docs/security/cp-persist-v1.md); couche B signal if `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`        |
+| Scan not latest on explore/persist               | W2 gate                                                                                                    | Re-select latest completed scan; **422** `SCAN_NOT_LATEST`                                                                 |
+
 
 Admins do **not** mutate user persisted policies through catalogue files. Catalogue is read-only platform configuration.
 
 ---
 
+
+
 ## Secrets and compliance
 
 - **Compose:** env templates (`env/*.env.template`) document required secrets; local overrides use `*.local.env` (gitignored). Use cafe-deploy **pre-commit** hooks to reduce accidental secret commits.
-- **minikube:** `cafe-platform-secrets` via `kubectl` only — not in Git; AppProject (PR8) must not sync `kind: Secret`. See [cafe-expresso `docs/secrets.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/secrets.md).
+- **minikube:** `cafe-platform-secrets` via `kubectl` only — not in Git; AppProject (PR8) must not sync `kind: Secret`. See [cafe-expresso](https://github.com/create2-labs/cafe-expresso/blob/main/docs/secrets.md) `docs/secrets.md`.
 - Service tokens (`CAFE_*_SERVICE_TOKEN`) are rotation-sensitive — update Discovery and CPM together (same values in Compose env or the K8s Secret).
 - Logs may contain `scan_id` and hashed wallet identifiers for CPM explore events; do not export raw wallet addresses to metrics.
 
 ---
+
+
 
 ## Verification checklist (after catalogue or CPM deploy)
 
@@ -899,6 +976,8 @@ Admins do **not** mutate user persisted policies through catalogue files. Catalo
 
 ---
 
+
+
 ## Additional resources
 
 - [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — API v1 integration reference (Compose + minikube bases)
@@ -908,7 +987,7 @@ Admins do **not** mutate user persisted policies through catalogue files. Catalo
 - [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) — Docker Compose, release workflow, env catalog
 - [cafe-deploy — Cloudflare Tunnel](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#cloudflare-tunnel-home--no-inbound-ports) — prod-tunnel compose + cloudflared
 - [CAFE_selfhosted.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/CAFE_selfhosted.md) — home OpenWrt + tunnel end-to-end
-- [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube Helm / Argo CD; [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md) kubectl tutorial
+- [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube Helm / Argo CD; `[docs/k8s.md](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)` kubectl tutorial
 - [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md) — P0 backlog PR0–PR9
 - [CPM v1 flow](./docs/architecture/cpm-v1-flow.md) — Option A scan → explore → persist
 - [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md)
@@ -917,3 +996,4 @@ Admins do **not** mutate user persisted policies through catalogue files. Catalo
 - [ADR — remove CP drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)
 - [RUNBOOK_CP_PERSISTENCE](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_CP_PERSISTENCE.md) — durable CP via cafe-persistence
 - [cafe-deploy TODO — Postgres retention](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md#postgres-retention--cp--scan-tables-grow-without-bound-soft-delete) — planned compaction work
+
