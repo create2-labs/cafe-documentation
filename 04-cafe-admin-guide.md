@@ -695,11 +695,11 @@ services:
 Prepare the host directory as a **flat** merge (same layout as the image). Prefer `crypto_policy_*.json` / `provider_manifest_*.json` so test-only `invalid_`* fixtures are not copied into the live catalogue:
 
 ```bash
-mkdir -p cafe-crypto-policy-mgt/volumes/catalogs
+mkdir -p cafe-deploy/volumes/catalogs
 cp cafe-crypto-policy-mgt/internal/domain/policy/testdata/crypto_policy_*.json \
-   cafe-crypto-policy-mgt/volumes/catalogs/
+   cafe-deploy/volumes/catalogs/
 cp cafe-crypto-policy-mgt/internal/domain/provider/testdata/provider_manifest_*.json \
-   cafe-crypto-policy-mgt/volumes/catalogs/
+   cafe-deploy/volumes/catalogs/
 # then edit/add JSON under volumes/catalogs/ and recreate or restart cafe-cpm
 ```
 
