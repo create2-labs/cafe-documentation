@@ -30,6 +30,7 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 ### Architecture
 
 - [CPM — Discovery v1 to policy flow](./docs/architecture/cpm-v1-flow.md) — Option A: scan → catalogue CP → explore (couche A, W2) → local composition (NB2) → signed persist; **no server drafts**; links ADR_20260824 + OpenAPI.
+- [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md) — Common user, developer, and administrator reference for per-chain activation, the current chain inventory, official sources, and fail-closed scanner configuration.
 - [CAFE MBSE / SysML Modelio project](./docs/architecture/cafe-mbse-sysml-modelio-project.md) — Step-by-step project plan to build a SysML/MBSE model of CAFE for Modelio (**out of scope / not started** for the Capability Provider amendement train — see ADR PR plan). From system context and logical architecture to behavior flows, state machines, and traceability.
 - [CPM UI specifications (`cafe-frontend/CPM-specs-ui.md`)](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) — Normative CPM page user stories **US1–US21** and delivery epics **CPM-UI-1…8** (solution profile view, scénario A).
 - [ADR — Capability Provider abstraction (ADR_20260803)](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) — ADR governing the Capability Provider model: two-layer explore/persist, `ProviderManifest`, `SolutionProfile`, posture matching, Nicetry pilote.

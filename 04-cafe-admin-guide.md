@@ -6,6 +6,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 ## Document Versioning
 
+- v0.12.0
+  - Date: September 30th, 2026
+  - Comments: Add the wallet scanner's per-chain EIP-7702 capability rule, official activation inventory, and Compose/Helm configuration ownership. See [wallet-scanner chain support](./docs/wallet-scanner-eip7702-chain-support.md).
 - v0.11.0
   - Date: September 24th, 2026
   - Comments: **CCD-P5** — the served CPM catalogue is the read-only mount of `cafe-deploy/catalogs/cpm/files`, not files baked into `oleglod/cafe-cpm`. Document the two pins (`CPM_VERSION`, `CPM_CATALOGUE_REVISION`), recreate after a JSON edit, fail-closed boot when the directory is empty or has no valid policy or manifest, and that `testdata/` is module fixtures only. Link [ADR_20260924](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260924_cpm_catalogue_at_deploy.md).
@@ -54,6 +57,7 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
     3. [SSH tunnel (non-public stacks)](#ssh-tunnel-non-public-stacks)
     4. [Cloudflare Tunnel (home hosting)](#cloudflare-tunnel-home-hosting)
     5. [Environment files (Compose)](#environment-files-compose)
+    6. [Wallet scanner chain capabilities](#wallet-scanner-chain-capabilities)
   5. [Deployment operations](#deployment-operations)
     1. [Local Compose rebuild (cafe-deploy)](#local-compose-rebuild-cafe-deploy)
     2. [Local minikube (cafe-expresso)](#local-minikube-cafe-expresso)
@@ -205,6 +209,16 @@ docker compose -f docker-compose.dev.yml --env-file env/dev.local.env up -d
 Key version pins (examples): `DISCOVERY_VERSION`, `FRONTEND_VERSION`, `CPM_VERSION`, `CPM_CATALOGUE_REVISION`, `NGINX_VERSION`. Image tags roll back a binary. `CPM_CATALOGUE_REVISION` rolls back the catalogue files; it is independent of `CPM_VERSION` (see [Two pins](#two-pins)).
 
 On **minikube**, secrets are a Kubernetes Secret (`cafe-platform-secrets`) — see [cafe-expresso](https://github.com/create2-labs/cafe-expresso/blob/main/docs/secrets.md) `docs/secrets.md` and deploy commands below (never commit plaintext).
+
+### Wallet scanner chain capabilities
+
+EIP-7702 is a chain protocol capability, not a property that can be inferred safely from an RPC endpoint or from matching account-code bytes. With the coordinated EIP-7702 scanner release, each wallet-scanner chain entry must explicitly declare `supports_eip7702`; missing or unknown values are treated as `false`. The field is not part of the currently deployed configuration schema, so operators must not advertise `delegations` before the scanner, Persistence, Discovery DTO, and OpenAPI changes are all released.
+
+The canonical chain configuration is `cafe-deploy/config/discovery/config.yaml`. The Helm/minikube copy is `cafe-expresso/charts/cafe-platform/config/discovery-config.yaml` and must stay aligned. Before enabling a new chain, verify its activation in an official chain source and update the common inventory.
+
+The protocol is active on all eight currently configured chains; their target capability value is therefore `true` once the coordinated release lands. Their chain IDs, activation gates, official sources, user-visible semantics, and developer rules are maintained in [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md).
+
+After changing the chain list or capability, restart `cafe-scanner-wallet` and verify that it loaded the intended configuration. If historical block scans are added later, a boolean is no longer sufficient: the scanner must compare the observed block with the chain's activation block or timestamp.
 
 ---
 
@@ -1010,4 +1024,3 @@ Admins do **not** mutate user persisted policies through catalogue files. Catalo
 - [ADR — remove CP drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)
 - [RUNBOOK_CP_PERSISTENCE](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_CP_PERSISTENCE.md) — durable CP via cafe-persistence
 - [cafe-deploy TODO — Postgres retention](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md#postgres-retention--cp--scan-tables-grow-without-bound-soft-delete) — planned compaction work
-

@@ -218,6 +218,10 @@ CAFE follows [OWASP](https://owasp.org/) practices, including:
 
 ### Wallet scans (Discovery)
 
+Wallet observations are evaluated per configured chain. EIP-7702 delegation semantics apply only when that chain is explicitly enabled as supporting EIP-7702; matching bytes on an unsupported or unknown chain are not a delegation fact. A delegation target remains unqualified until a separate smart-contract scanner analyses it.
+
+An empty delegation collection means that no valid designator was found on responding, EIP-7702-enabled chains. It is not a global proof of absence. The current chain inventory and official activation evidence are normative in [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md).
+
 #### Create (queue scan)
 
 - **`POST /api/discovery/v1/scan`** with `{ "address": "0x…" }`.

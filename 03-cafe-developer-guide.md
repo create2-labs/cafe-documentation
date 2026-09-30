@@ -4,6 +4,9 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.20.0
+  - Date: September 30th, 2026
+  - Comments: Document the wallet scanner's explicit per-chain EIP-7702 activation gate, result semantics, current supported-chain inventory, and official evidence. See [wallet-scanner chain support](./docs/wallet-scanner-eip7702-chain-support.md).
 - v0.19.0
   - Date: September 22nd, 2026
   - Comments: **CFB-P17** (amendement 2026-09-21) — catalogue `allowed_provider_summaries` (provider / signature / networks table); explore **greenfield** (empty `chain_ids` skips chain gate); persist multi-chain `chain_support_used[]` via CPM assist (no user `chain_id` picker); N-candidate chooser = provider choice. `/providers*` remains ops-only. See [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) and [PR plan CFB-P17](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
@@ -254,6 +257,14 @@ Normative boundary: [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob
 **`GET /providers*`** remains a live CPM API for **ops, admin diagnosis, and debug**. It is **not** the product frontend contract for catalog, Expected result, rejection copy, multi-candidate labels, or persist snapshot assembly. The SPA must not reintroduce a Nicetry / `ProviderManifest` mirror under product `src/cpm`.
 
 ## Discovery Workflows
+
+### Wallet scanner chain capabilities
+
+Wallet classification is performed independently for each configured chain. EIP-7702 designator parsing must be gated by explicit chain capability; the byte pattern alone must not enable the protocol interpretation. Unknown or missing capability is fail-closed.
+
+The normative algorithm, current CAFE chain inventory, test cases, and official activation sources are maintained in [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md). Integrations must treat `delegated_address` as an unqualified target address and must not derive smart-account or ERC-4337 status from it.
+
+The `delegations` field belongs to the coordinated scanner → Persistence → Discovery/OpenAPI delivery. Clients must feature-detect the released schema and must not assume that the field exists merely because a network supports EIP-7702.
 
 ### Queue a scan
 

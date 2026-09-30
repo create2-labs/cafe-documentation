@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.13.0
+  - Date: September 30th, 2026
+  - Comments: Clarify that EIP-7702 delegation detection is enabled per chain, what a delegation target means, and why an empty delegation list is limited to responding supported chains. See [wallet-scanner chain support](./docs/wallet-scanner-eip7702-chain-support.md).
 - v0.12.0
   - Date: September 22nd, 2026
   - Comments: **CFB-P17** — catalog detail shows a **provider table** (Provider | Signature | Networks) from CPM; scans with **no chain footprint** (greenfield) can still open matching providers; choosing a provider accepts **all** its deployable networks (no chain picker). See [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) and [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
@@ -208,6 +211,10 @@ CAFE automatically scans wallets across multiple Ethereum-compatible chains:
 - And more...
 
 The scan results show the risk status for each chain where the address has activity.
+
+EIP-7702 delegation detection is also chain-specific. CAFE interprets the 23-byte delegation designator only on networks where EIP-7702 has been activated and explicitly enabled in the platform configuration. A reported target is only a **delegation target address**; the wallet scan does not claim that the target is a contract, an ERC-4337 wallet, or safe code.
+
+When the deployed API exposes `delegations`, an empty array means that no designator was found on the responding EIP-7702-enabled chains scanned by CAFE. It does not prove absence on an unsupported chain or on a chain whose RPC request failed. See [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md) for the current network list and official activation sources.
 
 ### Scan Details
 
@@ -921,4 +928,3 @@ For additional help:
 
 - **Wallet Scan** — First step of crypto agility: observes Ethereum wallet posture (risk score + NIST). Does not choose a Crypto Policy.
 - **TLS Scan** — Informative only: analyzes TLS endpoint PQC readiness. CAFE does not provide remediation for TLS endpoints.
-

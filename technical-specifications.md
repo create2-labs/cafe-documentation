@@ -160,6 +160,8 @@ Full route tables: [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) an
 | `internal/persistence/storage/postgres.go` | Row-per-execution writers |
 | `openapi/discovery-v1.yaml` | Machine-readable contract |
 
+The wallet scanner must gate EIP-7702 designator parsing with an explicit per-chain capability. Missing or unknown capability is disabled; the 23-byte pattern cannot enable the interpretation by itself. The common inventory, official evidence, configuration ownership, parsing rules, and minimum test matrix are defined in [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md).
+
 ### Scan persistence model (target)
 
 - **One Postgres row per execution**; primary key `id` = `scan_id`.
