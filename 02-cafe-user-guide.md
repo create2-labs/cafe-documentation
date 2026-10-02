@@ -5,6 +5,9 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
 
 ## Document versionning
 
+- v0.14.0
+  - Date: October 2nd, 2026
+  - Comments: The wallet scan detail lists each EIP-7702 delegation as its chain id and delegation target address. An empty list means no designator was found on the responding enabled chains.
 - v0.13.0
   - Date: September 30th, 2026
   - Comments: Clarify that EIP-7702 delegation detection is enabled per chain, what a delegation target means, and why an empty delegation list is limited to responding supported chains. See [wallet-scanner chain support](./docs/wallet-scanner-eip7702-chain-support.md).
@@ -212,21 +215,22 @@ CAFE automatically scans wallets across multiple Ethereum-compatible chains:
 
 The scan results show the risk status for each chain where the address has activity.
 
-EIP-7702 delegation detection is also chain-specific. CAFE interprets the 23-byte delegation designator only on networks where EIP-7702 has been activated and explicitly enabled in the platform configuration. A reported target is only a **delegation target address**; the wallet scan does not claim that the target is a contract, an ERC-4337 wallet, or safe code.
+EIP-7702 delegation detection is also chain-specific. CAFE interprets the 23-byte delegation designator only on networks where EIP-7702 has been activated and explicitly enabled in the platform configuration. A reported target is only a **delegation target address**.
 
-When the deployed API exposes `delegations`, an empty array means that no designator was found on the responding EIP-7702-enabled chains scanned by CAFE. It does not prove absence on an unsupported chain or on a chain whose RPC request failed. See [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md) for the current network list and official activation sources.
+An empty delegation list means that no designator was found on the responding EIP-7702-enabled chains scanned by CAFE. It does not prove absence on an unsupported chain or on a chain whose RPC request failed. See [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md) for the current network list and official activation sources.
 
 ### Scan Details
 
 Clicking on a scan result shows detailed information:
 
 - **Address** — The Ethereum wallet address
-- **Account Type** — EOA (Externally Owned Account) or AA (Account Abstraction)
+- **Account Type** — EOA (Externally Owned Account), AA (Account Abstraction), Contract, or Unknown
 - **Algorithm** — Cryptographic algorithm used (e.g., ECDSA-secp256k1)
 - **NIST Security Level** — Quantum security level (1-5)
 - **Key Exposed** — Whether the public key is visible on-chain
 - **Risk Score** — Numerical risk assessment (0.0 to 1.0)
 - **Networks** — Chains where the address has activity
+- **EIP-7702 delegations** — For each chain, the delegation target address
 - **CBOM** — Cryptographic Bill of Materials in CycloneDX format
 
 ## TLS Endpoint Scanning
@@ -315,6 +319,7 @@ Click on any scan result to view:
 
 - Complete scan information
 - Multi-chain status
+- EIP-7702 delegations, as a chain id and a delegation target address
 - CBOM (Cryptographic Bill of Materials)
 - Security recommendations
 - Raw JSON data

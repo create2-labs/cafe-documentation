@@ -6,6 +6,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 ## Document Versioning
 
+- v0.13.0
+  - Date: October 2nd, 2026
+  - Comments: `supports_eip7702` is set on the eight shared chain entries in Compose and Helm. Discovery returns `delegations`. The scan detail shows each chain id and its delegation target address.
 - v0.12.0
   - Date: September 30th, 2026
   - Comments: Add the wallet scanner's per-chain EIP-7702 capability rule, official activation inventory, and Compose/Helm configuration ownership. See [wallet-scanner chain support](./docs/wallet-scanner-eip7702-chain-support.md).
@@ -212,11 +215,11 @@ On **minikube**, secrets are a Kubernetes Secret (`cafe-platform-secrets`) — s
 
 ### Wallet scanner chain capabilities
 
-EIP-7702 is a chain protocol capability, not a property that can be inferred safely from an RPC endpoint or from matching account-code bytes. With the coordinated EIP-7702 scanner release, each wallet-scanner chain entry must explicitly declare `supports_eip7702`; missing or unknown values are treated as `false`. The field is not part of the currently deployed configuration schema, so operators must not advertise `delegations` before the scanner, Persistence, Discovery DTO, and OpenAPI changes are all released.
+EIP-7702 is a chain protocol capability, not a property that can be inferred safely from an RPC endpoint or from matching account-code bytes. Each wallet-scanner chain entry declares `supports_eip7702`. An absent or unknown value stays disabled.
 
 The canonical chain configuration is `cafe-deploy/config/discovery/config.yaml`. The Helm/minikube copy is `cafe-expresso/charts/cafe-platform/config/discovery-config.yaml` and must stay aligned. Before enabling a new chain, verify its activation in an official chain source and update the common inventory.
 
-The protocol is active on all eight currently configured chains; their target capability value is therefore `true` once the coordinated release lands. Their chain IDs, activation gates, official sources, user-visible semantics, and developer rules are maintained in [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md).
+The eight currently configured chains set `supports_eip7702: true`. Discovery returns `delegations` on the wallet scan result. The scan detail lists each chain id and its delegation target address. Their chain IDs, activation gates, official sources, user-visible semantics, and developer rules are maintained in [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md).
 
 After changing the chain list or capability, restart `cafe-scanner-wallet` and verify that it loaded the intended configuration. If historical block scans are added later, a boolean is no longer sufficient: the scanner must compare the observed block with the chain's activation block or timestamp.
 
