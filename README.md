@@ -21,7 +21,7 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Developer Guide
 
-- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including **dual local deployments** (cafe-deploy Compose + cafe-expresso minikube), edge at **`http://localhost:8080`** on minikube for signup/signin, scan `scan_id` correlation, CPM-owned policy assessment, **product catalogue** (`/crypto-policies*` + derived `compatible_networks` + `allowed_provider_summaries`; `/providers*` ops-only), **explore v0.2** (greenfield empty `chain_ids`, `scan_compatible_providers` + `composition`), **persist** (CPM snapshot assist with multi-chain `chain_support_used[]` + `user_constraints`), and QA sign-off checks.
+- [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) — Canonical API v1 developer guide for Discovery (`/api/discovery/v1`) and CPM (`/api/cpm/v1`), including **dual local deployments** (cafe-deploy Compose + cafe-expresso minikube), pointing a running Compose `cafe-scanner-wallet` at host Anvil (`cafe-tests`) without rebuilding the image, edge at **`http://localhost:8080`** on minikube for signup/signin, scan `scan_id` correlation, CPM-owned policy assessment, **product catalogue** (`/crypto-policies*` + derived `compatible_networks` + `allowed_provider_summaries`; `/providers*` ops-only), **explore v0.2** (greenfield empty `chain_ids`, `scan_compatible_providers` + `composition`), **persist** (CPM snapshot assist with multi-chain `chain_support_used[]` + `user_constraints`), and QA sign-off checks.
 
 ### Admin Guide
 

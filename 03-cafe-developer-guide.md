@@ -4,15 +4,21 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.22.0
+  - Date: October 2nd, 2026
+  - Comments: `WalletScanResult.delegations` is always an array of `chain_id` and `delegated_address`. The address is the delegation target only. The scan detail shows those two fields.
+- v0.21.0
+  - Date: October 1st, 2026
+  - Comments: Document how a running Compose stack points `cafe-scanner-wallet` at the host Anvil chain from `[cafe-tests](https://github.com/create2-labs/cafe-tests)` by remounting config. The scanner image is distroless (no shell) and is not rebuilt. See [Point the wallet scanner at cafe-tests](#compose--point-the-wallet-scanner-at-cafe-tests).
 - v0.20.0
   - Date: September 30th, 2026
   - Comments: Document the wallet scanner's explicit per-chain EIP-7702 activation gate, result semantics, current supported-chain inventory, and official evidence. See [wallet-scanner chain support](./docs/wallet-scanner-eip7702-chain-support.md).
 - v0.19.0
   - Date: September 22nd, 2026
-  - Comments: **CFB-P17** (amendement 2026-09-21) — catalogue `allowed_provider_summaries` (provider / signature / networks table); explore **greenfield** (empty `chain_ids` skips chain gate); persist multi-chain `chain_support_used[]` via CPM assist (no user `chain_id` picker); N-candidate chooser = provider choice. `/providers*` remains ops-only. See [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) and [PR plan CFB-P17](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
+  - Comments: **CFB-P17** (amendement 2026-09-21) — catalogue `allowed_provider_summaries` (provider / signature / networks table); explore **greenfield** (empty `chain_ids` skips chain gate); persist multi-chain `chain_support_used[]` via CPM assist (no user `chain_id` picker); N-candidate chooser = provider choice. `/providers`* remains ops-only. See [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) and [PR plan CFB-P17](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
 - v0.18.0
   - Date: September 21st, 2026
-  - Comments: **CFB-P8** — catalogue product facts come from CPM (`compatible_networks` on `GET /crypto-policies*`); `GET /providers` is **ops/admin only** (not the product FE contract); no FE Nicetry / provider-manifest mirror. Explore exposes derived `composition`; persist snapshot via CPM assist. See [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) and [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
+  - Comments: **CFB-P8** — catalogue product facts come from CPM (`compatible_networks` on `GET /crypto-policies`*); `GET /providers` is **ops/admin only** (not the product FE contract); no FE Nicetry / provider-manifest mirror. Explore exposes derived `composition`; persist snapshot via CPM assist. See [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) and [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
 - v0.17.0
   - Date: August 27th, 2026
   - Comments: Align CP persist with ADR_20260824 (no drafts): normative engagement is signed `POST /api/cpm/v1/policies` + `payload_sha256`; `/drafts*` removed; W2 on explore/challenge/persist; NB1/NB2. See [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) and [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
@@ -24,13 +30,13 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
   - Comments: Align with ADR Capability Providers (2026-08): explore `selection_request` uses `key_rotation_model` (`none` | `per_userop`) instead of `key_rotation_required` bool; `target_posture` is the stable v0.1 wire alias for required posture; explore response carries `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, soft findings — no `graphEdges` / `nodeInstances`; persist payload is `cafe.crypto_policy.v0.2` with `accepted_provider_snapshot`. See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
 - v0.14.0
   - Date: August 9th, 2026
-  - Comments: Note **Cloudflare Tunnel** public base (`https://cafe.create2-labs.fr`) for home Compose prod-tunnel; same `/api/*` path contract as classic edge.
+  - Comments: Note **Cloudflare Tunnel** public base (`https://cafe.create2-labs.fr`) for home Compose prod-tunnel; same `/api/`* path contract as classic edge.
 - v0.13.0
   - Date: July 21st, 2026
   - Comments: Document dual local deployments — **cafe-deploy** (Docker Compose) and **cafe-expresso** (minikube); edge UI/API via `http://localhost:8080` on minikube; signup/signin through ingress (not frontend-only port-forward).
 - v0.12.0
   - Date: June 21st, 2026
-  - Comments: Align CPM persist table with CP-PERSIST V1 (`wallet-challenges`, `drafts/{id}/persist`); reference CPM UI user stories **US1–US21** / [`CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md).
+  - Comments: Align CPM persist table with CP-PERSIST V1 (`wallet-challenges`, `drafts/{id}/persist`); reference CPM UI user stories **US1–US21** / `[CPM-specs-ui.md](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md)`.
 - v0.11.0
   - Date: June 21st, 2026
   - Comments: Document public service version endpoints (`GET /api/version`, `GET /api/cpm/version`) and Platform Status CPM version tile (**CPM-OPS-3** / **CPM-UI-7A**).
@@ -50,17 +56,74 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
   - Date: Apr 19th, 2026
   - Comments: Documented the Discovery -> CPM normalized wallet observation contract (`cafe.discovery.wallet.observed` v0.1).
 
+
+
 ## Local deployments (Compose and minikube)
 
 CAFE currently supports **two parallel local deployments**. Both stay documented; Compose is not removed while minikube P0 matures.
 
-| Deployment | Repository | Edge (browser UI + `/api`) | Notes |
-| --- | --- | --- | --- |
-| **Docker Compose** | [`cafe-deploy`](https://github.com/create2-labs/cafe-deploy) | `https://localhost` (NGINX) or `http://localhost` | Classic VM/dev stack; env files + `docker compose` |
-| **Compose + Cloudflare Tunnel** | [`cafe-deploy`](https://github.com/create2-labs/cafe-deploy) | `https://cafe.create2-labs.fr` (TLS at Cloudflare; origin `http://127.0.0.1:8080`) | Home hosting; `docker-compose.prod-tunnel.yml` — see [admin guide](./04-cafe-admin-guide.md#cloudflare-tunnel-home-hosting) |
-| **minikube (P0)** | [`cafe-expresso`](https://github.com/create2-labs/cafe-expresso) | **`http://localhost:8080`** via ingress-nginx port-forward | Helm chart `cafe-platform`; kubectl/Helm ops in [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md) |
 
-Architecture / backlog: [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md). Operator kubectl cheat-sheet: [cafe-expresso `docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md). Admin day-2: [04-cafe-admin-guide.md](./04-cafe-admin-guide.md).
+| Deployment                      | Repository                                                       | Edge (browser UI + `/api`)                                                         | Notes                                                                                                                                |
+| ------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Docker Compose**              | `[cafe-deploy](https://github.com/create2-labs/cafe-deploy)`     | `https://localhost` (NGINX) or `http://localhost`                                  | Classic VM/dev stack; env files + `docker compose`                                                                                   |
+| **Compose + Cloudflare Tunnel** | `[cafe-deploy](https://github.com/create2-labs/cafe-deploy)`     | `https://cafe.create2-labs.fr` (TLS at Cloudflare; origin `http://127.0.0.1:8080`) | Home hosting; `docker-compose.prod-tunnel.yml` — see [admin guide](./04-cafe-admin-guide.md#cloudflare-tunnel-home-hosting)          |
+| **minikube (P0)**               | `[cafe-expresso](https://github.com/create2-labs/cafe-expresso)` | `http://localhost:8080` via ingress-nginx port-forward                             | Helm chart `cafe-platform`; kubectl/Helm ops in `[docs/k8s.md](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)` |
+
+
+Architecture / backlog: [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md). Operator kubectl cheat-sheet: [cafe-expresso](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md) `docs/k8s.md`. Admin day-2: [04-cafe-admin-guide.md](./04-cafe-admin-guide.md).
+
+### Compose — local blockchain
+
+On may wish to test the wallet scanner locally, on a local blockchain.
+
+To do so, start the local blockcahin from [cafe-tests](https://github.com/create2-labs/cafe-tests):
+
+```bash
+./scripts/up.sh
+```
+
+ NB : the blockchain runs `anvil` on **localhost**, not in a container. 
+
+The config file is shared with other services, leave it as it is before compose up.
+Create a temp scanner config file:
+
+```bash
+sed 's#http://127.0.0.1:8545#http://host.docker.internal:8545#' \
+  ../cafe-scanner-wallet/config-localtests.yaml > /tmp/scanner-wallet-localtests.yaml
+```
+
+`host.docker.internal` is how the container joins the host process. On Docker Desktop it already resolves; `extra_hosts: host-gateway` keeps the same name on Linux.
+
+Create a local override (do not commit it over the shared chain config), for example `cafe-deploy/overrides/scanner-wallet-localtests.yml`:
+
+```yaml
+services:
+  cafe-scanner-wallet:
+    volumes: !override
+      - /tmp/scanner-wallet-localtests.yaml:/app/config.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+`volumes: !override` needs Compose 2.24 or newer. It replaces the scanner mount only. From `cafe-deploy`, recreate that one service with the same compose file and env file that started the stack:
+
+```bash
+docker compose -f docker-compose.dev.yml -f overrides/scanner-wallet-localtests.yml \
+  --env-file env/dev.local.env \
+  up -d --no-deps --no-build --force-recreate cafe-scanner-wallet
+```
+
+`--no-build` keeps the image already running. Confirm the mount and the load from the host:
+
+```bash
+docker inspect cafe-scanner-wallet-dev \
+  --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
+docker logs cafe-scanner-wallet-dev 2>&1 | grep 'Loaded config from'
+```
+
+The inspect line must show `/tmp/scanner-wallet-localtests.yaml -> /app/config.yaml`. The log line is `Loaded config from: /app/config.yaml`. The container name suffix matches `ENV` (`cafe-scanner-wallet-${ENV}`). To scan the public chains again, run the same `up` without the override file.
+
+From `cafe-deploy`, `./scripts/test-cafe-tests-wallet-scan-smoke.sh` checks that Anvil is still the cafe-tests fixture and that this mount names only that chain, then scans the four manifest wallets through Discovery.
 
 ### minikube — necessary and sufficient edge access
 
@@ -74,12 +137,14 @@ kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8080:80
 
 Then:
 
-| Use | URL |
-| --- | --- |
-| Signup / Signin (browser) | **`http://localhost:8080/signup`** / **`http://localhost:8080/signin`** |
-| SPA home | `http://localhost:8080/` |
-| Edge API (Discovery) | `http://localhost:8080/api/...` (e.g. `/api/auth/signup`, `/api/discovery/v1/...`) |
-| Edge API (CPM) | `http://localhost:8080/api/cpm/v1/...` |
+
+| Use                       | URL                                                                                |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| Signup / Signin (browser) | `http://localhost:8080/signup` / `http://localhost:8080/signin`                    |
+| SPA home                  | `http://localhost:8080/`                                                           |
+| Edge API (Discovery)      | `http://localhost:8080/api/...` (e.g. `/api/auth/signup`, `/api/discovery/v1/...`) |
+| Edge API (CPM)            | `http://localhost:8080/api/cpm/v1/...`                                             |
+
 
 HTTPS on minikube P0 is **not** configured (TLS/cert-manager → staging). Use **HTTP** on `:8080`.
 
@@ -117,11 +182,13 @@ Empty `TURNSTILE_*` is valid in dev: the UI uses Cloudflare always-pass keys (`X
 
 Use one of these bases depending on where the caller runs.
 
-| Context | Discovery base | CPM base | Notes |
-| --- | --- | --- | --- |
-| Direct local services (Compose ports or kubectl port-forward to pods) | `http://localhost:8080` | `http://localhost:8082` | Backend paths exactly as registered by each service (`/auth/...`, `/discovery/v1/...`, `/api/cpm/v1/...` on CPM). |
-| **Edge — cafe-deploy NGINX** | `https://<host>/api` | `https://<host>` | Discovery `/api/discovery/v1/...`; CPM `/api/cpm/v1/...`. Local often `https://localhost`. Home tunnel: same paths on `https://cafe.create2-labs.fr` (TLS at Cloudflare). |
-| **Edge — cafe-expresso minikube** | `http://localhost:8080/api` | `http://localhost:8080` | After ingress port-forward `8080:80`. **Signup/signin UI:** `http://localhost:8080`. No TLS on P0. |
+
+| Context                                                               | Discovery base              | CPM base                | Notes                                                                                                                                                                     |
+| --------------------------------------------------------------------- | --------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Direct local services (Compose ports or kubectl port-forward to pods) | `http://localhost:8080`     | `http://localhost:8082` | Backend paths exactly as registered by each service (`/auth/...`, `/discovery/v1/...`, `/api/cpm/v1/...` on CPM).                                                         |
+| **Edge — cafe-deploy NGINX**                                          | `https://<host>/api`        | `https://<host>`        | Discovery `/api/discovery/v1/...`; CPM `/api/cpm/v1/...`. Local often `https://localhost`. Home tunnel: same paths on `https://cafe.create2-labs.fr` (TLS at Cloudflare). |
+| **Edge — cafe-expresso minikube**                                     | `http://localhost:8080/api` | `http://localhost:8080` | After ingress port-forward `8080:80`. **Signup/signin UI:** `http://localhost:8080`. No TLS on P0.                                                                        |
+
 
 Examples below use:
 
@@ -145,7 +212,7 @@ For development HTTPS with a self-signed or private CA on **Compose**, add `-k` 
 
 Most Discovery and CPM business endpoints require a Discovery-issued session token.
 
-**Browser (minikube):** open **`http://localhost:8080/signup`** or **`http://localhost:8080/signin`** (ingress port-forward must be running).
+**Browser (minikube):** open `http://localhost:8080/signup` or `http://localhost:8080/signin` (ingress port-forward must be running).
 
 **curl — direct Discovery** (Compose or port-forward to `cafe-discovery-backend`):
 
@@ -186,20 +253,24 @@ The token is an opaque Bearer value for callers. The frontend and CPM both reuse
 
 ## Public API Surface
 
+
+
 ### Discovery v1
 
-| Purpose | Direct service path | Edge path | Auth |
-| --- | --- | --- | --- |
-| Queue wallet or TLS scan | `POST /discovery/v1/scan` | `POST /api/discovery/v1/scan` | Bearer |
-| List wallet scan synopsis | `GET /discovery/v1/wallets/scans` | `GET /api/discovery/v1/wallets/scans` | Bearer |
-| Get wallet scan detail | `GET /discovery/v1/wallets/scans/{scan_id}` | `GET /api/discovery/v1/wallets/scans/{scan_id}` | Bearer |
-| Delete wallet scan | `DELETE /discovery/v1/wallets/scans/{scan_id}` | `DELETE /api/discovery/v1/wallets/scans/{scan_id}` | Bearer |
-| List TLS scan synopsis | `GET /discovery/v1/tls/scans` | `GET /api/discovery/v1/tls/scans` | Bearer |
-| List default TLS scans | `GET /discovery/v1/tls/scans/defaults` | `GET /api/discovery/v1/tls/scans/defaults` | Bearer |
-| Get TLS scan detail | `GET /discovery/v1/tls/scans/{scan_id}` | `GET /api/discovery/v1/tls/scans/{scan_id}` | Bearer |
-| Delete TLS scan | `DELETE /discovery/v1/tls/scans/{scan_id}` | `DELETE /api/discovery/v1/tls/scans/{scan_id}` | Bearer |
-| List configured RPCs | `GET /discovery/v1/rpcs` | `GET /api/discovery/v1/rpcs` | Public |
-| List scanner capabilities | `GET /discovery/v1/scanners` | `GET /api/discovery/v1/scanners` | Public |
+
+| Purpose                   | Direct service path                            | Edge path                                          | Auth   |
+| ------------------------- | ---------------------------------------------- | -------------------------------------------------- | ------ |
+| Queue wallet or TLS scan  | `POST /discovery/v1/scan`                      | `POST /api/discovery/v1/scan`                      | Bearer |
+| List wallet scan synopsis | `GET /discovery/v1/wallets/scans`              | `GET /api/discovery/v1/wallets/scans`              | Bearer |
+| Get wallet scan detail    | `GET /discovery/v1/wallets/scans/{scan_id}`    | `GET /api/discovery/v1/wallets/scans/{scan_id}`    | Bearer |
+| Delete wallet scan        | `DELETE /discovery/v1/wallets/scans/{scan_id}` | `DELETE /api/discovery/v1/wallets/scans/{scan_id}` | Bearer |
+| List TLS scan synopsis    | `GET /discovery/v1/tls/scans`                  | `GET /api/discovery/v1/tls/scans`                  | Bearer |
+| List default TLS scans    | `GET /discovery/v1/tls/scans/defaults`         | `GET /api/discovery/v1/tls/scans/defaults`         | Bearer |
+| Get TLS scan detail       | `GET /discovery/v1/tls/scans/{scan_id}`        | `GET /api/discovery/v1/tls/scans/{scan_id}`        | Bearer |
+| Delete TLS scan           | `DELETE /discovery/v1/tls/scans/{scan_id}`     | `DELETE /api/discovery/v1/tls/scans/{scan_id}`     | Bearer |
+| List configured RPCs      | `GET /discovery/v1/rpcs`                       | `GET /api/discovery/v1/rpcs`                       | Public |
+| List scanner capabilities | `GET /discovery/v1/scanners`                   | `GET /api/discovery/v1/scanners`                   | Public |
+
 
 Technical endpoints such as `GET /health`, `GET /metrics`, and internal `/internal/*` routes are not part of this public v1 product surface. `/plans` remains a separate account/quota API and is not versioned under Discovery v1 by this rollout.
 
@@ -207,10 +278,12 @@ Technical endpoints such as `GET /health`, `GET /metrics`, and internal `/intern
 
 Discovery and CPM each expose a **public** deploy-time version JSON contract (no auth). The frontend Platform Status page reads these at runtime (**CPM-UI-7A**).
 
-| Service | Direct path | Edge path | Response |
-| --- | --- | --- | --- |
-| Discovery | `GET /version` on `:8080` | `GET /api/version` | `{"version": "<image-tag>"}` |
-| CPM | `GET /version` on `:8082` (dev) / `:8080` (compose) | `GET /api/cpm/version` | `{"version": "<image-tag>"}` |
+
+| Service   | Direct path                                         | Edge path              | Response                     |
+| --------- | --------------------------------------------------- | ---------------------- | ---------------------------- |
+| Discovery | `GET /version` on `:8080`                           | `GET /api/version`     | `{"version": "<image-tag>"}` |
+| CPM       | `GET /version` on `:8082` (dev) / `:8080` (compose) | `GET /api/cpm/version` | `{"version": "<image-tag>"}` |
+
 
 ```bash
 curl -fsS "${DISCOVERY_BASE}/version" | jq .
@@ -223,40 +296,46 @@ Version strings come from the image build (`APP_VERSION` / Git tag). They are **
 
 ### CPM v1
 
-| Purpose | Direct or edge path | Auth | Audience |
-| --- | --- | --- | --- |
-| Crypto Policies catalogue | `GET /api/cpm/v1/crypto-policies` | Bearer | **Product** (SPA catalog) |
-| Crypto Policy by id | `GET /api/cpm/v1/crypto-policies/{crypto_policy_id}` | Bearer | **Product** |
-| Providers catalogue | `GET /api/cpm/v1/providers` | Bearer | **Ops / admin / debug only** |
-| Provider by id | `GET /api/cpm/v1/providers/{provider_id}` | Bearer | **Ops / admin / debug only** |
-| Explore decision (v0.2) | `POST /api/cpm/v1/policies/decisions/explore` | Bearer | **Product** (compose) |
-| Snapshot assist | `POST /api/cpm/v1/accepted-provider-snapshots` | Bearer | **Product** (persist prep) |
-| Wallet challenge (EOA persist prep) | `POST /api/cpm/v1/wallet-challenges` | Bearer; W2; computes `payload_sha256`; stores nothing | **Product** |
-| Persist policy (EOA — normative) | `POST /api/cpm/v1/policies` | Bearer + signed body (`payload` + `signed_message` + `signature`); W2 | **Product** |
-| List / read policies | `GET /api/cpm/v1/policies` | Bearer; exposes `payload_sha256` | **Product** |
-| Delete policy (NB1) | `DELETE /api/cpm/v1/policies?id=...` | Bearer (JWT only) | **Product** |
-| Async policy assessment request | `POST /api/cpm/v1/policies/assessment/request` | Bearer | **Product** |
-| Health | `GET /healthz` direct, `GET /api/cpm/healthz` at edge | Public | Ops |
-| Deployed version | `GET /version` direct, `GET /api/cpm/version` at edge | Public | Ops / UI status |
 
-Retired / removed routes (do not use): `GET /api/cpm/v1/policies/templates`, `/policies/instances`, `/policies/catalog`; **all** `/api/cpm/v1/drafts*` (ADR_20260824 — no shim).
+| Purpose                             | Direct or edge path                                   | Auth                                                                  | Audience                     |
+| ----------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------- |
+| Crypto Policies catalogue           | `GET /api/cpm/v1/crypto-policies`                     | Bearer                                                                | **Product** (SPA catalog)    |
+| Crypto Policy by id                 | `GET /api/cpm/v1/crypto-policies/{crypto_policy_id}`  | Bearer                                                                | **Product**                  |
+| Providers catalogue                 | `GET /api/cpm/v1/providers`                           | Bearer                                                                | **Ops / admin / debug only** |
+| Provider by id                      | `GET /api/cpm/v1/providers/{provider_id}`             | Bearer                                                                | **Ops / admin / debug only** |
+| Explore decision (v0.2)             | `POST /api/cpm/v1/policies/decisions/explore`         | Bearer                                                                | **Product** (compose)        |
+| Snapshot assist                     | `POST /api/cpm/v1/accepted-provider-snapshots`        | Bearer                                                                | **Product** (persist prep)   |
+| Wallet challenge (EOA persist prep) | `POST /api/cpm/v1/wallet-challenges`                  | Bearer; W2; computes `payload_sha256`; stores nothing                 | **Product**                  |
+| Persist policy (EOA — normative)    | `POST /api/cpm/v1/policies`                           | Bearer + signed body (`payload` + `signed_message` + `signature`); W2 | **Product**                  |
+| List / read policies                | `GET /api/cpm/v1/policies`                            | Bearer; exposes `payload_sha256`                                      | **Product**                  |
+| Delete policy (NB1)                 | `DELETE /api/cpm/v1/policies?id=...`                  | Bearer (JWT only)                                                     | **Product**                  |
+| Async policy assessment request     | `POST /api/cpm/v1/policies/assessment/request`        | Bearer                                                                | **Product**                  |
+| Health                              | `GET /healthz` direct, `GET /api/cpm/healthz` at edge | Public                                                                | Ops                          |
+| Deployed version                    | `GET /version` direct, `GET /api/cpm/version` at edge | Public                                                                | Ops / UI status              |
+
+
+Retired / removed routes (do not use): `GET /api/cpm/v1/policies/templates`, `/policies/instances`, `/policies/catalog`; **all** `/api/cpm/v1/drafts`* (ADR_20260824 — no shim).
 
 #### Catalogue facts vs providers (FE boundary — CFB-P8 / CFB-P17)
 
-Normative boundary: [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) / [PR plan CFB-\*](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md) (amendement 2026-09-21).
+Normative boundary: [ADR_20260918](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) / [PR plan CFB-](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md) (amendement 2026-09-21).
 
-| Surface | Source of truth | Forbidden |
-| --- | --- | --- |
-| Catalog compatible networks (union) | `compatible_networks` on `GET /crypto-policies*` (CPM-derived; `planned` excluded) | FE provider fixture / mirror; product join to `GET /providers` |
-| Catalog provider table | `allowed_provider_summaries` on `GET /crypto-policies*` (per-provider `provider_id`, signature summary, deployable networks) | Flat `allowed_providers.join` as the only attribution UI; product join to `/providers` |
-| Expected result (account / signature / constraints) | Explore `composition` on each `scan_compatible_providers[]` entry | Local Nicetry / profile mirror |
-| Multi-candidate choice | UI over explore `scan_compatible_providers[]` — select **one provider**; no chain picker | Inventing chain scope in the FE; joining `/providers` |
-| Persist `accepted_provider_snapshot` | CPM assist `POST /accepted-provider-snapshots` → multi-chain `chain_support_used[]` (no user `chain_id`) | Client assembly; user-picked single chain |
-| Rejection messaging (0 candidates) | Explore `rejected_candidates` messages/codes (**option A**); **not** for greenfield empty `chain_ids` alone | Reformulate by loading `/providers`; treat empty chains as `runtime.no_scan_compatible` |
 
-**`GET /providers*`** remains a live CPM API for **ops, admin diagnosis, and debug**. It is **not** the product frontend contract for catalog, Expected result, rejection copy, multi-candidate labels, or persist snapshot assembly. The SPA must not reintroduce a Nicetry / `ProviderManifest` mirror under product `src/cpm`.
+| Surface                                             | Source of truth                                                                                                              | Forbidden                                                                               |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Catalog compatible networks (union)                 | `compatible_networks` on `GET /crypto-policies*` (CPM-derived; `planned` excluded)                                           | FE provider fixture / mirror; product join to `GET /providers`                          |
+| Catalog provider table                              | `allowed_provider_summaries` on `GET /crypto-policies*` (per-provider `provider_id`, signature summary, deployable networks) | Flat `allowed_providers.join` as the only attribution UI; product join to `/providers`  |
+| Expected result (account / signature / constraints) | Explore `composition` on each `scan_compatible_providers[]` entry                                                            | Local Nicetry / profile mirror                                                          |
+| Multi-candidate choice                              | UI over explore `scan_compatible_providers[]` — select **one provider**; no chain picker                                     | Inventing chain scope in the FE; joining `/providers`                                   |
+| Persist `accepted_provider_snapshot`                | CPM assist `POST /accepted-provider-snapshots` → multi-chain `chain_support_used[]` (no user `chain_id`)                     | Client assembly; user-picked single chain                                               |
+| Rejection messaging (0 candidates)                  | Explore `rejected_candidates` messages/codes (**option A**); **not** for greenfield empty `chain_ids` alone                  | Reformulate by loading `/providers`; treat empty chains as `runtime.no_scan_compatible` |
+
+
+`GET /providers*` remains a live CPM API for **ops, admin diagnosis, and debug**. It is **not** the product frontend contract for catalog, Expected result, rejection copy, multi-candidate labels, or persist snapshot assembly. The SPA must not reintroduce a Nicetry / `ProviderManifest` mirror under product `src/cpm`.
 
 ## Discovery Workflows
+
+
 
 ### Wallet scanner chain capabilities
 
@@ -264,7 +343,9 @@ Wallet classification is performed independently for each configured chain. EIP-
 
 The normative algorithm, current CAFE chain inventory, test cases, and official activation sources are maintained in [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md). Integrations must treat `delegated_address` as an unqualified target address and must not derive smart-account or ERC-4337 status from it.
 
-The `delegations` field belongs to the coordinated scanner → Persistence → Discovery/OpenAPI delivery. Clients must feature-detect the released schema and must not assume that the field exists merely because a network supports EIP-7702.
+`WalletScanResult.delegations` is always present. Each item has `chain_id` and `delegated_address`. The address is the delegation target on that chain. A network that supports EIP-7702 does not by itself put an entry in the array.
+
+To exercise that scanner against the host Anvil chain while Compose is already up, remount `cafe-scanner-wallet` only. See [Point the wallet scanner at cafe-tests](#compose--point-the-wallet-scanner-at-cafe-tests).
 
 ### Queue a scan
 
@@ -320,6 +401,8 @@ curl "${DISCOVERY_BASE}/discovery/v1/tls/scans/defaults" \
   -H "Authorization: Bearer ${JWT}" | jq .
 ```
 
+
+
 ### Fetch scan detail
 
 Load full renderable details through the v1 detail endpoints using `scan_id`.
@@ -340,41 +423,49 @@ Discovery owns scan lifecycle, but it asks CPM whether a persisted policy refere
 
 Expected outcomes:
 
-| Situation | Response |
-| --- | --- |
-| Scan deleted | `204` |
-| Scan does not exist, is not visible, or was already deleted | `404` |
-| CPM says a policy references the scan | `409 SCAN_REFERENCED_BY_POLICY` |
-| CPM reference check is unavailable or misconfigured | `503 POLICY_REFERENCE_CHECK_UNAVAILABLE` |
+
+| Situation                                                   | Response                                 |
+| ----------------------------------------------------------- | ---------------------------------------- |
+| Scan deleted                                                | `204`                                    |
+| Scan does not exist, is not visible, or was already deleted | `404`                                    |
+| CPM says a policy references the scan                       | `409 SCAN_REFERENCED_BY_POLICY`          |
+| CPM reference check is unavailable or misconfigured         | `503 POLICY_REFERENCE_CHECK_UNAVAILABLE` |
+
 
 Discovery never reads CPM persistence directly, and it must not map CPM internal `401` or `403` responses to a user-facing `403` on scan delete.
 
 ## CPM Policy Workflows
 
+
+
 ### Two-layer model (ADR amendement)
 
-| Layer | Where | Authority |
-| --- | --- | --- |
-| **Couche A** | Explore → `scan_compatible_providers` | CPM (scan × Crypto Policy × solution profile) |
-| **Couche B** | Persist `user_constraints` (UI filter is indicative) | CPM rejeu at persist |
+
+| Layer        | Where                                                | Authority                                     |
+| ------------ | ---------------------------------------------------- | --------------------------------------------- |
+| **Couche A** | Explore → `scan_compatible_providers`                | CPM (scan × Crypto Policy × solution profile) |
+| **Couche B** | Persist `user_constraints` (UI filter is indicative) | CPM rejeu at persist                          |
+
 
 Vocabulary: **scan-compatible** (couche A), **user-qualified** (couche B UI indicative), **persistable** (CPM rejeu A+B + gates).
 
-A catalogue **Crypto Policy** is intention plus **CPM-derived display facts**: `required_posture` + `allowed_providers` + **`compatible_networks`** (union of deployable `chain_support` for allowed providers; `status ≠ planned`) + **`allowed_provider_summaries`** (one row per allowed provider: signature summary + that provider’s deployable networks). There is no `default_selection` and no template/instance catalogue. Product UIs read these fields from `GET /crypto-policies*` — they do **not** join `GET /providers` to compute networks or the catalog table. Redeploying CPM alone is enough to refresh catalog table signatures/networks.
+A catalogue **Crypto Policy** is intention plus **CPM-derived display facts**: `required_posture` + `allowed_providers` + `compatible_networks` (union of deployable `chain_support` for allowed providers; `status ≠ planned`) + `allowed_provider_summaries` (one row per allowed provider: signature summary + that provider’s deployable networks). There is no `default_selection` and no template/instance catalogue. Product UIs read these fields from `GET /crypto-policies`* — they do **not** join `GET /providers` to compute networks or the catalog table. Redeploying CPM alone is enough to refresh catalog table signatures/networks.
 
 ### Explore a decision synchronously (wire v0.2)
 
-`decisions/explore` is a synchronous preview. It evaluates a Crypto Policy and wallet `policy_context` against Capability Provider manifests (**couche A only**) and returns **`scan_compatible_providers`**. Each compatible candidate includes a derived **`composition`** view (account / signature / constraints) sufficient for Expected result — not the admin `ProviderManifest` dump. It does not persist a final policy and does not trigger the async assessment pipeline. Couche B fields do **not** belong on explore.
+`decisions/explore` is a synchronous preview. It evaluates a Crypto Policy and wallet `policy_context` against Capability Provider manifests (**couche A only**) and returns `scan_compatible_providers`. Each compatible candidate includes a derived `composition` view (account / signature / constraints) sufficient for Expected result — not the admin `ProviderManifest` dump. It does not persist a final policy and does not trigger the async assessment pipeline. Couche B fields do **not** belong on explore.
 
 **Greenfield (amendement 2026-09-21):** when `policy_context.chain_ids` is empty after normalisation, couche A **skips** the chain gate. Posture + wallet type still apply. Eligible candidates are returned (often N≥1). Empty chains alone **must not** produce `cpm.explore.no_deployable_candidate` / `adr_signal=runtime.no_scan_compatible`, and the SPA must not show the “no deployable candidate” refusal for that motive. Choosing a candidate later pins that provider’s full deployable multi-chain set at persist.
 
 #### Explore request fields (v0.2)
 
-| Field | Required | Notes |
-| --- | --- | --- |
-| `crypto_policy_id` | **Yes** | Catalogue Crypto Policy id (e.g. `cpm_pq_account_validation_v1`) |
-| `policy_context` | **Yes** (Option A) | Discovery v1 wallet scan detail envelope |
-| `scan_id` | Optional | Top-level scan binding for AUTH-02; must match `policy_context.scan_id` when both set |
+
+| Field              | Required           | Notes                                                                                 |
+| ------------------ | ------------------ | ------------------------------------------------------------------------------------- |
+| `crypto_policy_id` | **Yes**            | Catalogue Crypto Policy id (e.g. `cpm_pq_account_validation_v1`)                      |
+| `policy_context`   | **Yes** (Option A) | Discovery v1 wallet scan detail envelope                                              |
+| `scan_id`          | Optional           | Top-level scan binding for AUTH-02; must match `policy_context.scan_id` when both set |
+
 
 **Do not send** on explore: `selection_request`, `target_posture`, `allow_new_wallet`, `address_continuity_required`, `key_rotation_model`, or other couche B fields. Legacy explore bodies → HTTP **400**.
 
@@ -399,6 +490,8 @@ curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
     }
   }' | jq .
 ```
+
+
 
 #### Explore response — `scan_compatible_providers`
 
@@ -431,18 +524,21 @@ Each scan-compatible member carries Capability Provider fields. **No** `graphEdg
 ```
 
 Key semantics:
-- Public response key is **`scan_compatible_providers`** (not `ranked_candidates` as normative vocabulary).
+
+- Public response key is `scan_compatible_providers` (not `ranked_candidates` as normative vocabulary).
 - `claim_status: "declared"` — the provider has **declared** this capability; it is **not** an audited or executed proof.
 - Soft findings (`requires_bundler`, `requires_local_signer_state`) are non-blocking for couche A but must be explicitly accepted before persist.
 - Hard findings move the candidate to `rejected_candidates`.
 - `suggested_user_constraints` is **indicative** (seed for the UI panel). When the profile needs `per_userop`, couche A also requires `rotate_signer` capability.
 - Couche B does **not** influence explore membership.
 
+
+
 #### Option A: explore with Discovery v1 `policy_context`
 
-**Option A** (post-V1 CPM) means policy workflows run against **real user-owned wallet scans** via authenticated Discovery—see [CPM `workplans/CPM_post_v_1_option_a_scan_context.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md).
+**Option A** (post-V1 CPM) means policy workflows run against **real user-owned wallet scans** via authenticated Discovery—see [CPM](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md) `workplans/CPM_post_v_1_option_a_scan_context.md`.
 
-Production UI and integrators load wallet scan **detail** from `GET /discovery/v1/wallets/scans/{scan_id}` and send that shape as **`policy_context`**, plus `crypto_policy_id` and optional top-level **`scan_id`**. Field mapping: [Discovery `CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md`](https://github.com/create2-labs/cafe-discovery/blob/main/docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) §3.1; flow: [Option A architecture](./docs/architecture/cpm-v1-flow.md). CPM UI: [`cafe-frontend/CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) and [`docs/cpm-developer.md`](https://github.com/create2-labs/cafe-frontend/blob/main/docs/cpm-developer.md).
+Production UI and integrators load wallet scan **detail** from `GET /discovery/v1/wallets/scans/{scan_id}` and send that shape as `policy_context`, plus `crypto_policy_id` and optional top-level `scan_id`. Field mapping: [Discovery](https://github.com/create2-labs/cafe-discovery/blob/main/docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) `CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md` §3.1; flow: [Option A architecture](./docs/architecture/cpm-v1-flow.md). CPM UI: `[cafe-frontend/CPM-specs-ui.md](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md)` and `[docs/cpm-developer.md](https://github.com/create2-labs/cafe-frontend/blob/main/docs/cpm-developer.md)`.
 
 ```bash
 DETAIL=$(curl -s "${DISCOVERY_BASE}/discovery/v1/wallets/scans/${SCAN_ID}" \
@@ -460,21 +556,25 @@ curl -X POST "${CPM_BASE}/api/cpm/v1/policies/decisions/explore" \
     }')" | jq .
 ```
 
+
+
 #### No scan-compatible provider (HTTP 200 — not an error)
 
 Explore may return **200** with empty `scan_compatible_providers` and populated `rejected_candidates` — for example when no allowed provider can deploy on the wallet’s **non-empty** chain set. This is a **runtime signal** (ADR §7.2.1 family 2: `adr_signal=runtime.no_scan_compatible`), not a failed HTTP call. Distinct from persist couche B failure (`PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`). **Does not apply** to greenfield empty `chain_ids` alone (those scans return posture/wallet-eligible candidates).
 
-| Audience | What to use |
-| --- | --- |
-| End user | SPA rejection banner (**REQ8**) |
-| Admin / SRE | [Operations runbook — admin `curl` workflow](./docs/operations/cpm-explore-no-candidate-observability.md#admin-diagnosis--curl-workflow): explore JSON, `GET /crypto-policies` + `/providers`, CPM structured logs, Prometheus/Grafana |
-| Integrators | Treat HTTP 200 + rejections as a valid outcome; inspect `rejection_reasons[].code` before persist |
+
+| Audience    | What to use                                                                                                                                                                                                                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| End user    | SPA rejection banner (**REQ8**)                                                                                                                                                                                                                                                                                                      |
+| Admin / SRE | [Operations runbook — admin](./docs/operations/cpm-explore-no-candidate-observability.md#admin-diagnosis--curl-workflow) `curl` [workflow](./docs/operations/cpm-explore-no-candidate-observability.md#admin-diagnosis--curl-workflow): explore JSON, `GET /crypto-policies` + `/providers`, CPM structured logs, Prometheus/Grafana |
+| Integrators | Treat HTTP 200 + rejections as a valid outcome; inspect `rejection_reasons[].code` before persist                                                                                                                                                                                                                                    |
+
 
 **Smoke (integrated path):** from `cafe-deploy`, `SKIP_PERSIST=1 ./scripts/test-discovery-v1-wallet-scans-to-cpm.sh` with `SCAN_ID`, `DISCOVERY_BASE`, `CPM_BASE`, and credentials — stops after explore when no candidate is selected.
 
 ### Persist payload — `cafe.crypto_policy.v0.2`
 
-Normative engagement is **`POST /api/cpm/v1/policies`** (signed). There is **no** `/drafts*` path. The closed hashed `payload` must be **schema version `cafe.crypto_policy.v0.2`** with `crypto_policy_id`, `user_constraints`, `accepted_provider_snapshot`, and top-level `accepted_findings`. Clients obtain a registry-authoritative `accepted_provider_snapshot` via **`POST /api/cpm/v1/accepted-provider-snapshots`** (CFB-P5 Option B; multi-chain **CFB-P14**) before challenge/sign — they must **not** assemble the snapshot from a frontend provider fixture, and they must **not** send a user-picked `chain_id` for assist. See [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
+Normative engagement is `POST /api/cpm/v1/policies` (signed). There is **no** `/drafts`* path. The closed hashed `payload` must be **schema version** `cafe.crypto_policy.v0.2` with `crypto_policy_id`, `user_constraints`, `accepted_provider_snapshot`, and top-level `accepted_findings`. Clients obtain a registry-authoritative `accepted_provider_snapshot` via `POST /api/cpm/v1/accepted-provider-snapshots` (CFB-P5 Option B; multi-chain **CFB-P14**) before challenge/sign — they must **not** assemble the snapshot from a frontend provider fixture, and they must **not** send a user-picked `chain_id` for assist. See [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
 
 Flow: compose locally (NB2; choose **provider** among N explore candidates) → CPM snapshot assist → `POST /wallet-challenges` → EIP-191 sign → `POST /policies`. Explore / challenge / persist require **W2** (`422 SCAN_NOT_LATEST` / `503 DISCOVERY_UNAVAILABLE`). Replace = **NB1** DELETE then new signed persist. Retry / conflict → **409** `POLICY_ALREADY_EXISTS` — reconcile via `GET /policies` + `payload_sha256`.
 
@@ -511,6 +611,7 @@ Flow: compose locally (NB2; choose **provider** among N explore candidates) → 
 ```
 
 **Gate rules at persist:**
+
 - `schema_version` must be `cafe.crypto_policy.v0.2` (empty or `v0.1` → `400 CRYPTO_POLICY_PAYLOAD_INVALID`).
 - `crypto_policy_id` is required (legacy `template_id` on the wire → invalid).
 - `user_constraints` is required; CPM **rejoue couche A then B**. Couche B failure → **400** `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` (runtime signal `adr_signal=runtime.no_provider_after_user_constraints`).
@@ -519,6 +620,8 @@ Flow: compose locally (NB2; choose **provider** among N explore candidates) → 
 - Soft findings listed in `accepted_findings` must match those returned by explore for that candidate.
 - Wallet proof (signed message from `wallet-challenges`) is required on `POST /policies`.
 - Client-supplied `payload_sha256` on write is **ignored** (server authority).
+
+
 
 ### Request async policy assessment
 
@@ -541,13 +644,15 @@ curl -X POST "${CPM_BASE}/api/cpm/v1/policies/assessment/request" \
 
 Expected outcomes:
 
-| Situation | Response |
-| --- | --- |
-| Valid wallet scan, event accepted | `202 Accepted` |
-| `policy_context` or legacy `selection_request` / couche B fields present | `400` |
-| Malformed `scan_id`, missing `crypto_policy_id`, or disallowed unknown field | `400` |
-| Unknown scan, scan not readable by the owner, or TLS/non-wallet scan | `404` |
-| Discovery authz or detail lookup unavailable | `503` |
+
+| Situation                                                                    | Response       |
+| ---------------------------------------------------------------------------- | -------------- |
+| Valid wallet scan, event accepted                                            | `202 Accepted` |
+| `policy_context` or legacy `selection_request` / couche B fields present     | `400`          |
+| Malformed `scan_id`, missing `crypto_policy_id`, or disallowed unknown field | `400`          |
+| Unknown scan, scan not readable by the owner, or TLS/non-wallet scan         | `404`          |
+| Discovery authz or detail lookup unavailable                                 | `503`          |
+
 
 CPM reconstructs the authoritative wallet observation server-side from Discovery v1 wallet scan detail. Clients must not send `policy_context` to this endpoint.
 
@@ -572,16 +677,18 @@ Use this checklist before opening or merging API coherency documentation changes
 - Policy assessment docs say CPM-owned, wallet-scan only, body `scan_id` + `crypto_policy_id`, `202` on acceptance, `policy_context` / legacy `selection_request` rejected, TLS scan IDs rejected.
 - Delete scan docs mention CPM reference verification, `409 SCAN_REFERENCED_BY_POLICY`, and `503 POLICY_REFERENCE_CHECK_UNAVAILABLE`.
 - Edge docs preserve `/api/internal/*` as not exposed.
-- **Catalogue (product):** `GET /crypto-policies*` documents intention + derived `compatible_networks` + `allowed_provider_summaries` (catalog table); retired `/policies/templates|instances|catalog` not presented as live.
-- **`GET /providers*`:** documented as **ops/admin only** — not the product FE contract for catalog, Expected result, rejection copy, multi-candidate labels, or snapshot assembly.
+- **Catalogue (product):** `GET /crypto-policies`* documents intention + derived `compatible_networks` + `allowed_provider_summaries` (catalog table); retired `/policies/templates|instances|catalog` not presented as live.
+- `GET /providers*`**:** documented as **ops/admin only** — not the product FE contract for catalog, Expected result, rejection copy, multi-candidate labels, or snapshot assembly.
 - **Explore v0.2:** input `crypto_policy_id` + `policy_context` (+ optional `scan_id`); output `scan_compatible_providers` (+ derived `composition`); legacy explore → **400**.
 - **Greenfield:** empty `chain_ids` skips couche A chain gate; not `runtime.no_scan_compatible` for that motive alone.
 - **Capability Providers:** explore response carries `required_posture`, `resulting_posture`, `solution_profile_ref`, `maturity`, `claim_status`, `suggested_user_constraints`, `composition` — no `graphEdges`/`nodeInstances`.
-- **`claim_status: "declared"`** is documented as a provider declaration, not an audited or executed proof.
+- `claim_status: "declared"` is documented as a provider declaration, not an audited or executed proof.
 - **Persist (no drafts):** snapshot from CPM assist (`POST /accepted-provider-snapshots`) with multi-chain `chain_support_used[]` (no user `chain_id`); signed `POST /policies` with `schema_version: "cafe.crypto_policy.v0.2"`, closed hashed fields + `payload_sha256` (server); CPM rejeu A+B; `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE` on couche B KO; `unpinned_pending_fixture` refs rejected (Nicetry refs pinned); W2; NB1/NB2.
 - **FE boundary:** no product Nicetry / provider-manifest mirror; no product join to `/providers`; N-candidate UI chooses a **provider** (ADR_20260918 amendement 2026-09-21 / CFB-P17).
-- **Removed:** `/api/cpm/v1/drafts*` — do not document as live.
+- **Removed:** `/api/cpm/v1/drafts`* — do not document as live.
 - **Vocabulary:** scan-compatible / user-qualified / persistable; avoid `ranked_candidates` as normative term.
+
+
 
 ## Additional Resources
 
@@ -591,10 +698,11 @@ Use this checklist before opening or merging API coherency documentation changes
 - `docs/api/api-v1-qa-checklist.md` for a compact reviewer checklist.
 - [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) for platform administration (deploy Compose + minikube, CPM catalogue, signals).
 - [cafe-deploy](https://github.com/create2-labs/cafe-deploy) — Docker Compose deployment (still supported).
-- [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube / Helm / Argo CD; operator tutorial [`docs/k8s.md`](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md).
+- [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube / Helm / Argo CD; operator tutorial `[docs/k8s.md](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)`.
 - [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md) — Capability Provider ADR.
-- [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) — catalogue facts / FE provider boundary (CFB-\*).
-- [ADR_20260918 PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md) — CFB-P\* execution split.
+- [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) — catalogue facts / FE provider boundary (CFB-).
+- [ADR_20260918 PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md) — CFB-P execution split.
 - [CPM README — Capability Providers](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service, env var (`CPM_CATALOGUE_DIR`), signals.
-- [cafe-frontend `docs/cpm-developer.md`](https://github.com/create2-labs/cafe-frontend/blob/main/docs/cpm-developer.md) — FE two-layer maintainer guide (FE-DOC-AMEND).
-- [cafe-frontend `CPM-specs-ui.md`](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) — CPM UI user stories US1–US21 and delivery epics.
+- [cafe-frontend](https://github.com/create2-labs/cafe-frontend/blob/main/docs/cpm-developer.md) `docs/cpm-developer.md` — FE two-layer maintainer guide (FE-DOC-AMEND).
+- [cafe-frontend](https://github.com/create2-labs/cafe-frontend/blob/main/CPM-specs-ui.md) `CPM-specs-ui.md` — CPM UI user stories US1–US21 and delivery epics.
+

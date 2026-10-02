@@ -6,6 +6,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 ## Document Versioning
 
+- v0.14.0
+  - Date: October 2nd, 2026
+  - Comments: The chain list is one file, mounted on Discovery, Persistence, the wallet scanner, and the TLS scanner. `cafe-scanner-wallet/config.yaml` is the scanner default outside that stack.
 - v0.13.0
   - Date: October 2nd, 2026
   - Comments: `supports_eip7702` is set on the eight shared chain entries in Compose and Helm. Discovery returns `delegations`. The scan detail shows each chain id and its delegation target address.
@@ -215,13 +218,24 @@ On **minikube**, secrets are a Kubernetes Secret (`cafe-platform-secrets`) — s
 
 ### Wallet scanner chain capabilities
 
-EIP-7702 is a chain protocol capability, not a property that can be inferred safely from an RPC endpoint or from matching account-code bytes. Each wallet-scanner chain entry declares `supports_eip7702`. An absent or unknown value stays disabled.
+The running stack has one chain file. Compose and Helm mount it read-only at `/app/config.yaml` on four workloads: `cafe-discovery-backend`, `cafe-persistence`, `cafe-scanner-wallet`, and `cafe-scanner-tls`.
 
-The canonical chain configuration is `cafe-deploy/config/discovery/config.yaml`. The Helm/minikube copy is `cafe-expresso/charts/cafe-platform/config/discovery-config.yaml` and must stay aligned. Before enabling a new chain, verify its activation in an official chain source and update the common inventory.
+| Deployment | File operators edit | How it reaches the four workloads |
+| --- | --- | --- |
+| Compose | `cafe-deploy/config/discovery/config.yaml` | Volume in `compose/20-discovery.yml` |
+| Helm / minikube | `cafe-expresso/charts/cafe-platform/config/discovery-config.yaml` | ConfigMap `discovery-config` |
+
+`cafe-scanner-wallet/config.yaml` is the scanner repository default, for a run outside Compose and Helm. A deployed stack does not read it. Editing that file leaves the running chain list unchanged.
+
+`name` and `chain_id` are the inventory those services share. Discovery also reads `rpc` for `GET /discovery/v1/rpcs`. Persistence uses `name` and `chain_id` when it exports a wallet observation. The wallet scanner also reads `rpc`, `moralis_chain_name`, and `supports_eip7702`. Discovery and Persistence ignore `moralis_chain_name` and `supports_eip7702`. The TLS scanner loads the same file at startup and stops if the file cannot be parsed; it does not scan these chains.
+
+A change to `name`, `chain_id`, or `rpc` is visible only after Discovery, Persistence, and `cafe-scanner-wallet` restart. A change to `moralis_chain_name` or `supports_eip7702` needs a restart of `cafe-scanner-wallet` only. To give the wallet scanner a different chain list, such as a local chain, replace that service's mount and leave the shared file unchanged.
+
+EIP-7702 is a chain protocol capability, not a property that can be inferred safely from an RPC endpoint or from matching account-code bytes. Each wallet-scanner chain entry declares `supports_eip7702`. An absent or unknown value stays disabled. Before enabling a new chain, verify its activation in an official chain source and update the common inventory. Keep the Helm copy aligned with the Compose source.
 
 The eight currently configured chains set `supports_eip7702: true`. Discovery returns `delegations` on the wallet scan result. The scan detail lists each chain id and its delegation target address. Their chain IDs, activation gates, official sources, user-visible semantics, and developer rules are maintained in [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md).
 
-After changing the chain list or capability, restart `cafe-scanner-wallet` and verify that it loaded the intended configuration. If historical block scans are added later, a boolean is no longer sufficient: the scanner must compare the observed block with the chain's activation block or timestamp.
+After changing a capability, confirm `cafe-scanner-wallet` loaded the intended file. If historical block scans are added later, a boolean is no longer sufficient: the scanner must compare the observed block with the chain's activation block or timestamp.
 
 ---
 
