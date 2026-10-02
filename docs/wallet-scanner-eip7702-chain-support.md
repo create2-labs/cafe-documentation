@@ -4,7 +4,7 @@ This document is the common CAFE reference for interpreting EIP-7702 delegation 
 
 Last verified: **September 30th, 2026**.
 
-> **Delivery status:** this is the normative behavior for the EIP-7702 wallet-scanner change described in [`cafe-scanner-wallet/ScanEIP7702.md`](https://github.com/create2-labs/cafe-scanner-wallet/blob/main/ScanEIP7702.md). A deployment must not claim that `delegations` is available until the scanner, Persistence, Discovery DTO, and OpenAPI changes have all been released.
+> **Delivery status:** `delegations` is part of the wallet scan result. Each entry is a chain id and a delegation target address. The eight CAFE chains set `supports_eip7702: true` in the Compose source and in the Helm copy. An absent or unknown capability stays disabled. The normative behavior is described in [`cafe-scanner-wallet/ScanEIP7702.md`](https://github.com/create2-labs/cafe-scanner-wallet/blob/main/ScanEIP7702.md).
 
 ## Why chain activation matters
 
@@ -46,9 +46,9 @@ Protocol definition: [EIP-7702 — Set Code for EOAs](https://eips.ethereum.org/
 
 ## Administrator rule
 
-The `supports_eip7702` field below is the **target configuration introduced with the coordinated EIP-7702 delivery**. It is not present in the current deployed schema yet. Until that delivery is complete, operators must treat delegation detection as unavailable; chain activation alone does not make the current scanner expose `delegations`.
+Every wallet-scanner chain entry carries an explicit `supports_eip7702` capability. The Compose source is `cafe-deploy/config/discovery/config.yaml`. The Helm copy is `cafe-expresso/charts/cafe-platform/config/discovery-config.yaml`. An absent or unknown value stays disabled. Chain activation alone does not make the scanner report a delegation.
 
-The wallet-scanner chain configuration must carry an explicit capability owned by the deployment configuration:
+The configuration shape is:
 
 ```yaml
 blockchains:
@@ -68,7 +68,7 @@ Operational rules:
 - Update the Compose source configuration first, then keep Helm/minikube configuration in sync.
 - A node software release that implements EIP-7702 is not by itself proof that the fork is active on the configured network.
 
-For the current eight chains, the target value is `supports_eip7702: true`.
+For the current eight chains, the configured value is `supports_eip7702: true`.
 
 ## Developer rule
 
