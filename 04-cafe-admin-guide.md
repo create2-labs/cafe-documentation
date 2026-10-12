@@ -6,6 +6,9 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 
 ## Document Versioning
 
+- v0.15.0
+  - Date: October 12th, 2026
+  - Comments: `cafe-indexer-gateway` is the only Moralis and Etherscan caller. Secrets and ceilings live on one replica of `oleglod/cafe-indexer-gateway`. `ETHERSCAN_API_KEY` stays empty. The chain file is that service's catalogue. Readiness `GET /api/indexer-gateway/health` enters `platform_up`. See [ADR_20261007](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20261007_onchain_indexer_service.md).
 - v0.14.0
   - Date: October 2nd, 2026
   - Comments: The chain list is one file, mounted on Discovery, Persistence, the wallet scanner, and the TLS scanner. `cafe-scanner-wallet/config.yaml` is the scanner default outside that stack.
@@ -71,6 +74,7 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
     4. [Staging / production](#staging--production)
     5. [Production via Cloudflare Tunnel](#production-via-cloudflare-tunnel)
     6. [Rollback](#rollback)
+    7. [Indexer gateway](#indexer-gateway)
   6. [Health checks and service status](#health-checks-and-service-status)
     1. [Quick probes (Compose)](#quick-probes-compose)
     2. [Quick probes (minikube)](#quick-probes-minikube)
@@ -172,7 +176,8 @@ Public routes at the edge (same path contract on Compose NGINX and minikube Ingr
 - CPM health (probes): `/api/cpm/healthz`
 - Discovery deploy version: `/api/version` (public, no auth)
 - CPM deploy version: `/api/cpm/version` (public, no auth; **CPM-OPS-3**)
-- Platform status: `/status` (minikube PR5 — Prometheus `platform_up` via status-proxy; not the Prometheus UI)
+- Platform status: `/status` (minikube PR5 — Prometheus `platform_up` via status-proxy; not the Prometheus UI). One `UP` or `DOWN`. A failed indexer-gateway probe turns it `DOWN`. There is no gateway row and no provider name.
+- Indexer gateway readiness: `/api/indexer-gateway/health` (rewritten to `GET /health`; not `/api/health`; no provider route)
 
 CPM `GET /metrics` is scraped inside the cluster / Docker network (not exposed through the public edge). See **Observability** below. Grafana is **not** in minikube P0 (phase 1b / PR10–PR11).
 
@@ -218,18 +223,18 @@ On **minikube**, secrets are a Kubernetes Secret (`cafe-platform-secrets`) — s
 
 ### Wallet scanner chain capabilities
 
-The running stack has one chain file. Compose and Helm mount it read-only at `/app/config.yaml` on four workloads: `cafe-discovery-backend`, `cafe-persistence`, `cafe-scanner-wallet`, and `cafe-scanner-tls`.
+The running stack has one chain file. Compose and Helm mount it read-only at `/app/config.yaml` on five workloads: `cafe-discovery-backend`, `cafe-persistence`, `cafe-scanner-wallet`, `cafe-scanner-tls`, and `cafe-indexer-gateway`.
 
-| Deployment | File operators edit | How it reaches the four workloads |
+| Deployment | File operators edit | How it reaches the five workloads |
 | --- | --- | --- |
 | Compose | `cafe-deploy/config/discovery/config.yaml` | Volume in `compose/20-discovery.yml` |
 | Helm / minikube | `cafe-expresso/charts/cafe-platform/config/discovery-config.yaml` | ConfigMap `discovery-config` |
 
 `cafe-scanner-wallet/config.yaml` is the scanner repository default, for a run outside Compose and Helm. A deployed stack does not read it. Editing that file leaves the running chain list unchanged.
 
-`name` and `chain_id` are the inventory those services share. Discovery also reads `rpc` for `GET /discovery/v1/rpcs`. Persistence uses `name` and `chain_id` when it exports a wallet observation. The wallet scanner also reads `rpc`, `moralis_chain_name`, and `supports_eip7702`. Discovery and Persistence ignore `moralis_chain_name` and `supports_eip7702`. The TLS scanner loads the same file at startup and stops if the file cannot be parsed; it does not scan these chains.
+`name` and `chain_id` are the inventory those services share. Discovery also reads `rpc` for `GET /discovery/v1/rpcs`. Persistence uses `name` and `chain_id` when it exports a wallet observation. The wallet scanner reads `rpc` and `supports_eip7702`. `cafe-indexer-gateway` uses the same file as its catalogue: every history request is checked there first, and an absent `chain_id` is `unsupported_chain` with no provider call. `moralis_chain_name` is required only after that check, and only when Moralis is the selected provider. A known chain without that alias is a configuration error. Etherscan does not use the alias. Discovery and Persistence ignore `moralis_chain_name` and `supports_eip7702`. The TLS scanner loads the same file at startup and stops if the file cannot be parsed; it does not scan these chains.
 
-A change to `name`, `chain_id`, or `rpc` is visible only after Discovery, Persistence, and `cafe-scanner-wallet` restart. A change to `moralis_chain_name` or `supports_eip7702` needs a restart of `cafe-scanner-wallet` only. To give the wallet scanner a different chain list, such as a local chain, replace that service's mount and leave the shared file unchanged.
+A change to `name`, `chain_id`, or `rpc` is visible only after Discovery, Persistence, and `cafe-scanner-wallet` restart. A change to `moralis_chain_name` needs a restart of `cafe-indexer-gateway`. A change to `supports_eip7702` needs a restart of `cafe-scanner-wallet`. To give the wallet scanner a different chain list, such as a local chain, replace that service's mount and leave the shared file unchanged. The gateway keeps the shared catalogue.
 
 EIP-7702 is a chain protocol capability, not a property that can be inferred safely from an RPC endpoint or from matching account-code bytes. Each wallet-scanner chain entry declares `supports_eip7702`. An absent or unknown value stays disabled. Before enabling a new chain, verify its activation in an official chain source and update the common inventory. Keep the Helm copy aligned with the Compose source.
 
@@ -350,6 +355,7 @@ Probes after tunnel is healthy:
 curl -fsS https://cafe.create2-labs.fr/api/version
 curl -fsS https://cafe.create2-labs.fr/api/cpm/version
 curl -fsS https://cafe.create2-labs.fr/api/cpm/healthz
+curl -fsS https://cafe.create2-labs.fr/api/indexer-gateway/health
 ```
 
 Do not stack `overrides/prod.yml` with the tunnel override. Grafana / Prometheus remain on loopback (SSH LocalForward), same as classic prod.
@@ -359,6 +365,18 @@ Do not stack `overrides/prod.yml` with the tunnel override. Grafana / Prometheus
 **Compose:** change image version env vars to the last known-good tag, re-render templates if needed, `docker compose up -d`. Do not mix IMM schema migrations across incompatible Discovery versions without reading [RUNBOOK_SCAN_HISTORY.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_SCAN_HISTORY.md).
 
 **minikube:** re-`helm upgrade` with previous chart/values or known-good image tags in values; or `helm rollback cafe-platform` if revisions exist.
+
+### Indexer gateway
+
+`cafe-indexer-gateway`, image `oleglod/cafe-indexer-gateway`, is the only workload that calls Moralis or Etherscan. `searchHistory` stays in the wallet scanner. One provider is selected at startup. The cutover is one stack deployment: this service receives the secrets, and the scanner stops calling the providers. `ETHERSCAN_API_KEY` stays empty, so Moralis remains selected until that secret is filled later.
+
+Compose and Helm run one replica. These variables exist only on that replica: `MORALIS_API_KEY`, `MORALIS_API_URL`, `ETHERSCAN_API_KEY`, `ETHERSCAN_API_URL`, `ETHERSCAN_MAX_CALLS_PER_SECOND`, and `ETHERSCAN_MAX_CALLS_PER_DAY`. For this cutover the ceilings are 3 and 100000. The scanner does not receive them. Do not put a non-empty `ETHERSCAN_API_KEY` in an env template or in the active Kubernetes secret.
+
+The daily counter is in memory on that replica. It resets at UTC midnight and when the process restarts. There is no shared or persistent store. That reset is a best-effort development guard, not a provider quota across restarts. A second replica is a deployment error for those counters.
+
+The gateway does not publish presence. The startup log names `etherscan`, `moralis`, or `none`, without the key, the URL, or the ceilings. `indexer_gateway_provider_info` is 1 on exactly one series, with `provider` equal to that name. `indexer_gateway_no_provider_total` counts `no_provider` replies. Provider `none`, a refused authentication, a provider quota, or a provider HTTP failure does not turn `GET /health` to `DOWN`.
+
+Readiness is `GET /health` on the service. The edge path is `GET /api/indexer-gateway/health`. Blackbox job `cafe-indexer-gateway-health` uses labels `platform=cafe` and `mode=blackbox`. A failed probe fails `platform_blackbox_up` and therefore `platform_up`. `/platform/status` then shows `DOWN` and stays a single status. There is no Grafana row and no screen for this service or for the provider name. The ceilings are not returned by health, Discovery, or the NATS page.
 
 ---
 
@@ -379,6 +397,7 @@ curl -fsS http://localhost:8082/healthz        # CPM direct
 curl -fsS http://localhost:8082/version        # CPM version direct
 curl -kfsS https://localhost/api/cpm/healthz   # CPM via NGINX (prod-like path)
 curl -kfsS https://localhost/api/cpm/version   # CPM version via NGINX (prod-like path)
+curl -fsS http://localhost/api/indexer-gateway/health   # edge → gateway GET /health
 ```
 
 
@@ -393,7 +412,8 @@ curl -fsS "${EDGE_BASE}/api/health"
 curl -fsS "${EDGE_BASE}/api/version"
 curl -fsS "${EDGE_BASE}/api/cpm/healthz"
 curl -fsS "${EDGE_BASE}/api/cpm/version"
-curl -fsS "${EDGE_BASE}/status"                # platform_up (PR5)
+curl -fsS "${EDGE_BASE}/api/indexer-gateway/health"
+curl -fsS "${EDGE_BASE}/status"                # platform_up (one UP or DOWN)
 curl -fsS "${EDGE_BASE}/healthz"               # edge guards
 ```
 
@@ -436,6 +456,7 @@ kubectl -n "$NS" get events --sort-by='.lastTimestamp' | tail -20
 
 - Prometheus **Targets** → `cafe-cpm-api` = UP (`PROMETHEUS_CPM_METRICS_TARGET`, default `cafe-cpm:8080`)
 - Blackbox job `cafe-cpm-health` → `PROMETHEUS_CPM_HEALTH_URL` (default `https://nginx/api/cpm/healthz`)
+- Blackbox job `cafe-indexer-gateway-health` → `GET /api/indexer-gateway/health`. A failure fails `platform_up`. No Grafana dashboard for this probe.
 - Grafana dashboard **CAFE - CPM Explore Rejections** (UID `cafe-cpm-explore-rejections`)
 
 ```bash
@@ -993,6 +1014,7 @@ Admins do **not** mutate user persisted policies through catalogue files. Catalo
 
 - **Compose:** env templates (`env/*.env.template`) document required secrets; local overrides use `*.local.env` (gitignored). Use cafe-deploy **pre-commit** hooks to reduce accidental secret commits.
 - **minikube:** `cafe-platform-secrets` via `kubectl` only — not in Git; AppProject (PR8) must not sync `kind: Secret`. See [cafe-expresso](https://github.com/create2-labs/cafe-expresso/blob/main/docs/secrets.md) `docs/secrets.md`.
+- Moralis and Etherscan keys, URLs, and the two Etherscan ceilings are injected only into the single `cafe-indexer-gateway` replica. `ETHERSCAN_API_KEY` stays empty. See [Indexer gateway](#indexer-gateway).
 - Service tokens (`CAFE_*_SERVICE_TOKEN`) are rotation-sensitive — update Discovery and CPM together (same values in Compose env or the K8s Secret).
 - Logs may contain `scan_id` and hashed wallet identifiers for CPM explore events; do not export raw wallet addresses to metrics.
 

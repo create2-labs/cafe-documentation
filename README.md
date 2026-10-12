@@ -1,6 +1,6 @@
 # CAFE Documentation
 
-This directory contains the official documentation for the CAFE (Crypto-Agility Framework for Ethereum) project. Last updated: September 2026.
+This directory contains the official documentation for the CAFE (Crypto-Agility Framework for Ethereum) project. Last updated: October 2026.
 
 ## Available Documents
 
@@ -25,7 +25,7 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Admin Guide
 
-- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) — Platform administration for **Compose and minikube**: environments, Helm/kubectl deploy, ingress edge, **Cloudflare Tunnel** (home / no inbound ports), deploy and health checks (`/api/version`, `/api/cpm/version`), pgweb, CPM catalogue (read-only mount of `cafe-deploy/catalogs/cpm/files`, pins `CPM_VERSION` + `CPM_CATALOGUE_REVISION`, recreate without a new image), ADR §7.2.1 signals (catalogue and runtime), observability, operator diagnosis, and user-support scenarios.
+- [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) — Platform administration for **Compose and minikube**: environments, Helm/kubectl deploy, ingress edge, **Cloudflare Tunnel** (home / no inbound ports), deploy and health checks (`/api/version`, `/api/cpm/version`, `/api/indexer-gateway/health`), pgweb, CPM catalogue (read-only mount of `cafe-deploy/catalogs/cpm/files`, pins `CPM_VERSION` + `CPM_CATALOGUE_REVISION`, recreate without a new image), ADR §7.2.1 signals (catalogue and runtime), observability, operator diagnosis, and user-support scenarios.
 
 ### Architecture
 
@@ -60,6 +60,8 @@ CAFE is composed of three main services:
 2. **Crypto Policy Manager** — Definition and enforcement of cryptographic policies
 3. **Remediation** — Secure migration and attested key operations
 
+`cafe-indexer-gateway` is the only caller of Moralis or Etherscan. `searchHistory` stays in the wallet scanner. One provider is selected. The gateway does not publish presence. Its signal is readiness, `GET /health`, reached at the edge as `GET /api/indexer-gateway/health` and included in `platform_up`. The provider name is not displayed. The TLS scanner still publishes presence with its local `ScannerPresenceMessage`. Normative decision: [ADR_20261007_onchain_indexer_service](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20261007_onchain_indexer_service.md).
+
 ## Additional Resources
 
 - [CAFE Whitepaper](https://github.com/create2-labs/cafe-whitepaper) — May be private while content is prepared for public release
@@ -72,7 +74,8 @@ CAFE is composed of three main services:
 - [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube / Helm / Argo CD (Kubernetes P0)
 - [Crypto backend Repository](https://github.com/create2-labs/cafe-crypto-backend) — Cryptographic backend; tooling for building and running applications with Post-Quantum Cryptography (PQC) support
 - [Edge Repository](https://github.com/create2-labs/cafe-edge) — Reverse-proxy images with PQC
-- [TLS scanner Repository](https://github.com/create2-labs/cafe-scanner-tls) — TLS scanner service with PQC
+- [TLS scanner Repository](https://github.com/create2-labs/cafe-scanner-tls) — TLS scanner service with PQC. Presence is still the local `ScannerPresenceMessage`.
+- [Indexer gateway](https://github.com/create2-labs/cafe-indexer-gateway) — Image `oleglod/cafe-indexer-gateway`. Sole Moralis and Etherscan caller; one replica; `ETHERSCAN_API_KEY` empty for this cutover.
 - [CAFE Website](../cafe-website/) — Public website
 
 ## Contributing
