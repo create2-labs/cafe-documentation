@@ -8,6 +8,7 @@
       1. [Logical view](#logical-view)
       2. [Authentication flow](#authentication-flow)
       3. [CPM ↔ Discovery coupling](#cpm--discovery-coupling)
+      4. [On-chain indexer gateway](#on-chain-indexer-gateway)
    3. [Public HTTP API](#public-http-api)
    4. [Discovery service](#discovery-service)
       1. [Components](#components)
@@ -54,6 +55,7 @@ This document describes **how CAFE is built and operated**: services, APIs, pers
 | Discovery API | Go (Fiber), OpenAPI v1, PostgreSQL, Redis cache, NATS events |
 | CPM API | Go, durable CP via HTTP → cafe-persistence → **Postgres only** (P0; no Redis CP cache), JWT from Discovery |
 | Scanners | Separate worker images (wallet EVM, TLS) |
+| On-chain indexer | `cafe-indexer-gateway`: sole Moralis or Etherscan caller, NATS page subject |
 | Frontend | Web SPA (React), Bearer session to Discovery/CPM |
 | Edge | NGINX (or equivalent) — `/api/discovery/v1`, `/api/cpm/v1` |
 | Contracts | Shared wire types in `cafe-contracts` |
@@ -70,7 +72,8 @@ Non-goals for this document: line-by-line OpenAPI field lists (see per-repo `ope
 | `cafe-deploy` | Compose, Ansible, smoke scripts, runbooks; Cloudflare Tunnel prod-tunnel edge |
 | `cafe-documentation` | Product and integration docs (this directory) |
 | `cafe-crypto-backend` | PQC cryptographic tooling |
-| `cafe-scanner-wallet`, `cafe-scanner-tls` | Scanner implementations |
+| `cafe-scanner-wallet`, `cafe-scanner-tls` | Scanner implementations. The TLS scanner still publishes presence with local `ScannerPresenceMessage`. |
+| `cafe-indexer-gateway` | Only caller of Moralis and Etherscan. Image `oleglod/cafe-indexer-gateway`. Readiness is `GET /health`. |
 | `cafe-edge` | PQC-capable reverse proxy images |
 | `cafe-contracts` | Shared observation and event schemas |
 
@@ -118,6 +121,22 @@ Non-goals for this document: line-by-line OpenAPI field lists (see per-repo `ope
 
 See [docs/architecture/cpm-v1-flow.md](./docs/architecture/cpm-v1-flow.md) and [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md).
 
+### On-chain indexer gateway
+
+`cafe-indexer-gateway` is the only process that calls Moralis or Etherscan. `searchHistory` stays in `cafe-scanner-wallet`. The gateway selects one provider at startup: Etherscan when `ETHERSCAN_API_KEY` is non-empty after trim, otherwise Moralis when `MORALIS_API_KEY` is non-empty, otherwise `none`. It does not fail over or mix providers. It does not publish scanner presence. Readiness is `GET /health`: `UP` only when NATS is ready for the current connection generation. The selected name (`etherscan`, `moralis`, or `none`) is the startup log and a single `indexer_gateway_provider_info` series set to 1. It is not a field of `/health`, of presence, of the page contract, or of a screen. The TLS scanner still publishes presence with its local `ScannerPresenceMessage`.
+
+The chain file mounted on the gateway is the catalogue. Every page request is checked against it first. An unknown `chain_id` is `unsupported_chain` and the provider is not called. `moralis_chain_name` is required only after that check, and only when Moralis is selected. A known chain without that alias is a configuration error. Etherscan does not use the alias.
+
+Secrets and the two Etherscan ceilings exist only on this service. The stack runs one replica. The daily counter is in memory and best-effort: it resets on process restart and at UTC midnight, with no shared store. `ETHERSCAN_API_KEY` is empty for this cutover. The image is `oleglod/cafe-indexer-gateway`. The cutover is one stack deployment.
+
+`GET /api/indexer-gateway/health` rewrites to `GET /health` and enters `platform_up`. A refused authentication, a provider quota, an HTTP failure, or provider `none` does not fail the probe. A failed blackbox probe fails `platform_up`, so `/platform/status` becomes `DOWN`. That page stays one `UP` or `DOWN`. There is no Grafana row and no screen for the provider name. `indexer_gateway_no_provider_total` counts `no_provider` replies.
+
+The page subject is `cafe.indexer.gateway.transactions.page.v1`, queue group `cafe-indexer-gateway`. The wallet scanner, including `cmd/cli/publickey`, publishes the request and does not subscribe. The reply inbox is required. A message without one is dropped before decode and before any provider call: no publication and no error envelope. The gateway publishes only on that inbox. There is no NATS ACL. The subject and the gateway ports stay inside the stack. Only `/health` is reached through the edge. There is no `GET /provider`. Ceilings are not endpoint fields.
+
+API-started scans go through Discovery, which checks credentials. `cmd/cli/publickey` publishes on the internal bus directly. Validation and the limiter are not authentication. A process already on that bus can consume quota if it supplies a reply inbox, bounded by 32 concurrent handlers. Without a reply inbox the provider is not called.
+
+`GET /discovery/v1/onchainscanner` returns only `scanner_available`. It does not return `onchain_indexer` or a provider name. Networks does not show the provider or a gateway presence.
+
 ---
 
 ## Public HTTP API
@@ -128,6 +147,7 @@ Canonical path prefixes (edge):
 | --- | --- |
 | Discovery | `/api/discovery/v1` |
 | CPM | `/api/cpm/v1` |
+| Indexer gateway readiness | `/api/indexer-gateway/health` → service `GET /health` (not `/api/health`; no `GET /provider`) |
 
 **Public deploy version** (outside v1 prefixes, no auth):
 
@@ -323,7 +343,7 @@ Delivery history (CPM-UI-1…8) assumed server drafts; **runtime path** after RD
 
 **Platform → Status** (`PlatformStatusContent.vue`) shows:
 
-- Platform health (Prometheus `platform_up` via `/status`)
+- Platform health (Prometheus `platform_up` via `/status`). One `UP` or `DOWN`. A failed `cafe-indexer-gateway` blackbox probe sets it to `DOWN`. The page has no gateway row and no provider name.
 - **Version Information:** Frontend (`/version.json`), Discovery (`/api/version`), CPM (`/api/cpm/version`)
 
 Service layer: `platformService.getBackendVersion()`, `platformService.getCpmVersion()`. Unreachable backends display **Unknown** (same UX as Discovery).
@@ -344,7 +364,7 @@ When `POST /api/cpm/v1/policies/decisions/explore` returns HTTP **200** with emp
 
 ## Infrastructure and deployment
 
-- **`cafe-deploy`:** Docker Compose stacks, Ansible, nginx templates, smoke scripts.
+- **`cafe-deploy`:** Docker Compose stacks, Ansible, nginx templates, smoke scripts. One `oleglod/cafe-indexer-gateway` replica. `ETHERSCAN_API_KEY` stays empty. Moralis and Etherscan secrets and ceilings are on that service only.
 - **Public edge modes (Compose):**
 
 | Mode | Entrypoint | Edge | Notes |
@@ -408,6 +428,8 @@ sequenceDiagram
 
 Events must not upsert by `(user_id, address)` in a way that replaces `scan_id`.
 
+Wallet history pages use a separate subject, `cafe.indexer.gateway.transactions.page.v1`. The scanner publishes; the gateway replies on the request inbox. That subject is not part of the scan lifecycle above.
+
 ---
 
 ## Testing and quality assurance
@@ -453,7 +475,8 @@ cd cafe-deploy/scripts
 | **Edge** | Reverse proxy exposing unified `/api/*` paths |
 | **Cloudflare Tunnel** | Outbound `cloudflared` path so home Compose can publish HTTPS without inbound 80/443 (`prod-tunnel` HTTP origin) |
 | **IMM** | Scan immutability implementation milestone (IMM-1 … IMM-12) |
-| **NATS** | Message bus for scan lifecycle events |
+| **NATS** | Message bus for scan lifecycle events and for `cafe.indexer.gateway.transactions.page.v1` |
+| **indexer gateway** | Sole Moralis/Etherscan caller. Readiness is `GET /health`. It does not publish presence. |
 | **Option A** | CPM integration via Discovery v1 `scan_id` |
 | **persistence-service** | Discovery component writing scan rows from NATS |
 | **Postgres-first** | v1 reads authoritative from PostgreSQL |

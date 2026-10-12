@@ -4,6 +4,9 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
 
 ## Document Versioning
 
+- v0.23.0
+  - Date: October 12th, 2026
+  - Comments: Wallet history pages are requested on `cafe.indexer.gateway.transactions.page.v1`. `GET /discovery/v1/onchainscanner` returns only `scanner_available`. Edge readiness is `GET /api/indexer-gateway/health`. There is no `GET /provider`. See [ADR_20261007](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20261007_onchain_indexer_service.md).
 - v0.22.0
   - Date: October 2nd, 2026
   - Comments: `WalletScanResult.delegations` is always an array of `chain_id` and `delegated_address`. The address is the delegation target only. The scan detail shows those two fields.
@@ -113,7 +116,7 @@ docker compose -f docker-compose.dev.yml -f overrides/scanner-wallet-localtests.
   up -d --no-deps --no-build --force-recreate cafe-scanner-wallet
 ```
 
-`--no-build` keeps the image already running. Confirm the mount and the load from the host:
+`--no-build` keeps the image already running. The override replaces the scanner mount only. `cafe-indexer-gateway` keeps the shared chain file as its catalogue. A `chain_id` that exists only on the scanner override is `unsupported_chain` for history pages. Confirm the mount and the load from the host:
 
 ```bash
 docker inspect cafe-scanner-wallet-dev \
@@ -270,9 +273,37 @@ The token is an opaque Bearer value for callers. The frontend and CPM both reuse
 | Delete TLS scan           | `DELETE /discovery/v1/tls/scans/{scan_id}`     | `DELETE /api/discovery/v1/tls/scans/{scan_id}`     | Bearer |
 | List configured RPCs      | `GET /discovery/v1/rpcs`                       | `GET /api/discovery/v1/rpcs`                       | Public |
 | List scanner capabilities | `GET /discovery/v1/scanners`                   | `GET /api/discovery/v1/scanners`                   | Public |
+| Wallet scanner availability | `GET /discovery/v1/onchainscanner`             | `GET /api/discovery/v1/onchainscanner`             | Public |
 
 
 Technical endpoints such as `GET /health`, `GET /metrics`, and internal `/internal/*` routes are not part of this public v1 product surface. `/plans` remains a separate account/quota API and is not versioned under Discovery v1 by this rollout.
+
+### On-chain history and indexer readiness
+
+`cafe-indexer-gateway` is the only caller of Moralis or Etherscan. The wallet scanner keeps `searchHistory` and reads one page at a time over NATS. One provider is selected. That name is not a field of the page contract, of `GET /discovery/v1/onchainscanner`, or of any screen.
+
+| Concern | Contract |
+| --- | --- |
+| Subject | `cafe.indexer.gateway.transactions.page.v1` |
+| Request publisher | Wallet scanner, including `cmd/cli/publickey`. It does not subscribe to this subject. |
+| Subscriber | Gateway, queue group `cafe-indexer-gateway`. It does not publish a request. |
+| Reply | The request reply inbox. It must be non-empty. The gateway publishes only there. |
+| Missing inbox | Rejected before decode and before any provider call. No publication and no error envelope. |
+| Edge | `GET /api/indexer-gateway/health` rewrites to gateway `GET /health`. This is not `/api/health`. There is no `GET /provider`. |
+| Discovery | `GET /discovery/v1/onchainscanner` returns only `scanner_available`. No `onchain_indexer` and no provider name. |
+
+There is no NATS ACL. The subject and the gateway's internal ports stay inside the stack. Only `/health` is reached through the edge. Scans started from the API go through Discovery, which checks credentials. `cmd/cli/publickey` publishes on this bus directly and does not go through Discovery. Request validation and the limiter are not authentication. A process already on the bus can consume provider quota if it supplies a reply inbox, and only within 32 concurrent handlers. Without that inbox the provider is not called. Etherscan ceilings are not fields of any endpoint.
+
+```bash
+curl -fsS "${EDGE_BASE}/api/indexer-gateway/health"
+curl -fsS "${DISCOVERY_BASE}/discovery/v1/onchainscanner"
+```
+
+A ready gateway returns HTTP 200 and `{"status":"UP"}`. Not ready is HTTP 503 and `{"status":"DOWN"}`. `UP` means the gateway can accept NATS requests. Provider `none`, a refused provider authentication, a provider quota, or a provider HTTP error leaves this probe `UP`.
+
+```json
+{ "scanner_available": true }
+```
 
 ### Service version (deploy observability)
 
