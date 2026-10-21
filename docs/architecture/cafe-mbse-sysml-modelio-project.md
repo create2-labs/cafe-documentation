@@ -46,9 +46,7 @@ Modelio peut etre utilise de plusieurs facons selon les modules disponibles et l
 | `technical-specifications.md` | Architecture, services, APIs, persistence, messaging |
 | `03-cafe-developer-guide.md` | Routes API, contrats HTTP, smokes developpeur |
 | `04-cafe-admin-guide.md` | Operations, deploiement, diagnostic |
-| `docs/architecture/cpm-v1-flow.md` | Flow Discovery -> CPM |
-| `docs/security/cpm-contract.md` | AuthN/AuthZ CPM, contrats securite |
-| `docs/security/cp-persist-v1.md` | Persist EOA, wallet proof |
+| `docs/architecture/cpm-v1-flow.md` | Flow Discovery -> signed policy persist |
 
 ---
 

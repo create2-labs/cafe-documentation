@@ -44,21 +44,23 @@ This directory contains the official documentation for the CAFE (Crypto-Agility 
 
 ### Security and Operations
 
-- [CPM Auth contract](./docs/security/cpm-contract.md) — Authenticated CPM behavior, scan authorization, owner-scoped **policies** (no `/drafts*`), error contract (explore legacy **400**, W2 / persist codes, assessment v0.2)
-- [CP-PERSIST (no drafts)](./docs/security/cp-persist-v1.md) — Signed `POST /policies`, `payload_sha256`, W2, NB1/NB2; links ADR + OpenAPI + `CP_PERSIST.md`
+- [CP-PERSIST (no drafts)](./docs/architecture/cpm-v1-flow.md) — Signed `POST /policies`, `payload_sha256`, W2, NB1/NB2; links ADR + OpenAPI + `CP_PERSIST.md`
 - [CPM explore — no scan-compatible provider (observability & admin diagnosis)](./docs/operations/cpm-explore-no-candidate-observability.md) — **REQ9** / **IMM-OPS-1…2**: runtime signal `runtime.no_scan_compatible`, structured logs, Prometheus/Grafana, `curl` admin workflow (complements user-facing **REQ8** in the SPA; couche B is a separate signal)
 
 ## About CAFE
 
-CAFE (Crypto-Agility Framework for Ethereum) is a three-service platform designed to discover, govern, and remediate cryptographic assets on Ethereum—ensuring compliance, resilience, and trust in the post-quantum and zero-knowledge era.
+CAFE (Crypto-Agility Framework for Ethereum) discovers, governs, and remediates cryptographic assets on Ethereum.
 
 ### Architecture
 
-CAFE is composed of three main services:
+The logical view is in [technical-specifications.md](./technical-specifications.md#logical-view). Current ownership:
 
-1. **Discovery** — Identification of on-chain and network quantum exposures
-2. **Crypto Policy Manager** — Definition and enforcement of cryptographic policies
-3. **Remediation** — Secure migration and attested key operations
+1. **Discovery** (`cafe-discovery`, `cmd/server`) — scan requests and wallet scan list/detail
+2. **Scanners** (`cafe-scanner-wallet`, `cafe-scanner-tls`) — scan execution
+3. **Persistence** (`cafe-persistence`, `cmd/persistence`) — single writer of scan lifecycle events and of crypto-policy rows
+4. **Crypto Policy Manager** — policy catalogue, explore, and signed persist
+5. **Indexer gateway** — the only Moralis or Etherscan caller
+6. **Remediation** — migration of cryptographic assets (roadmap)
 
 `cafe-indexer-gateway` is the only caller of Moralis or Etherscan. `searchHistory` stays in the wallet scanner. One provider is selected. The gateway does not publish presence. Its signal is readiness, `GET /health`, reached at the edge as `GET /api/indexer-gateway/health` and included in `platform_up`. The provider name is not displayed. The TLS scanner still publishes presence with its local `ScannerPresenceMessage`. Normative decision: [ADR_20261007_onchain_indexer_service](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20261007_onchain_indexer_service.md).
 
@@ -75,7 +77,7 @@ CAFE is composed of three main services:
 - [Crypto backend Repository](https://github.com/create2-labs/cafe-crypto-backend) — Cryptographic backend; tooling for building and running applications with Post-Quantum Cryptography (PQC) support
 - [Edge Repository](https://github.com/create2-labs/cafe-edge) — Reverse-proxy images with PQC
 - [TLS scanner Repository](https://github.com/create2-labs/cafe-scanner-tls) — TLS scanner service with PQC. Presence is still the local `ScannerPresenceMessage`.
-- [Indexer gateway](https://github.com/create2-labs/cafe-indexer-gateway) — Image `oleglod/cafe-indexer-gateway`. Sole Moralis and Etherscan caller; one replica; `ETHERSCAN_API_KEY` empty for this cutover.
+- [Indexer gateway](https://github.com/create2-labs/cafe-indexer-gateway) — Image `oleglod/cafe-indexer-gateway`. Sole Moralis and Etherscan caller; one replica.
 - [CAFE Website](../cafe-website/) — Public website
 
 ## Contributing

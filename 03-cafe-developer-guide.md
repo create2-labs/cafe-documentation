@@ -24,7 +24,7 @@ This guide is the canonical integration reference for the CAFE API v1 rollout. I
   - Comments: **CFB-P8** — catalogue product facts come from CPM (`compatible_networks` on `GET /crypto-policies`*); `GET /providers` is **ops/admin only** (not the product FE contract); no FE Nicetry / provider-manifest mirror. Explore exposes derived `composition`; persist snapshot via CPM assist. See [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) and [PR plan](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md).
 - v0.17.0
   - Date: August 27th, 2026
-  - Comments: Align CP persist with ADR_20260824 (no drafts): normative engagement is signed `POST /api/cpm/v1/policies` + `payload_sha256`; `/drafts*` removed; W2 on explore/challenge/persist; NB1/NB2. See [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) and [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
+  - Comments: Align CP persist with ADR_20260824 (no drafts): normative engagement is signed `POST /api/cpm/v1/policies` + `payload_sha256`; `/drafts*` removed; W2 on explore/challenge/persist; NB1/NB2. See [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) and [CP-PERSIST runbook](./docs/architecture/cpm-v1-flow.md).
 - v0.16.0
   - Date: August 22nd, 2026
   - Comments: Align with ADR amendement two-layer model: catalogue `GET /crypto-policies` + `/providers` (retired `/policies/templates|instances|catalog`); explore v0.2 input `scan_id?` + `crypto_policy_id` + `policy_context` → `scan_compatible_providers` (legacy explore → **400**); persist `cafe.crypto_policy.v0.2` with `crypto_policy_id` + `user_constraints` (CPM rejeu A+B; `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`); assessment body `scan_id` + `crypto_policy_id` only. See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
@@ -605,7 +605,7 @@ Explore may return **200** with empty `scan_compatible_providers` and populated 
 
 ### Persist payload — `cafe.crypto_policy.v0.2`
 
-Normative engagement is `POST /api/cpm/v1/policies` (signed). There is **no** `/drafts`* path. The closed hashed `payload` must be **schema version** `cafe.crypto_policy.v0.2` with `crypto_policy_id`, `user_constraints`, `accepted_provider_snapshot`, and top-level `accepted_findings`. Clients obtain a registry-authoritative `accepted_provider_snapshot` via `POST /api/cpm/v1/accepted-provider-snapshots` (CFB-P5 Option B; multi-chain **CFB-P14**) before challenge/sign — they must **not** assemble the snapshot from a frontend provider fixture, and they must **not** send a user-picked `chain_id` for assist. See [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
+Normative engagement is `POST /api/cpm/v1/policies` (signed). There is **no** `/drafts`* path. The closed hashed `payload` must be **schema version** `cafe.crypto_policy.v0.2` with `crypto_policy_id`, `user_constraints`, `accepted_provider_snapshot`, and top-level `accepted_findings`. Clients obtain a registry-authoritative `accepted_provider_snapshot` via `POST /api/cpm/v1/accepted-provider-snapshots` (CFB-P5 Option B; multi-chain **CFB-P14**) before challenge/sign — they must **not** assemble the snapshot from a frontend provider fixture, and they must **not** send a user-picked `chain_id` for assist. See [CP-PERSIST runbook](./docs/architecture/cpm-v1-flow.md).
 
 Flow: compose locally (NB2; choose **provider** among N explore candidates) → CPM snapshot assist → `POST /wallet-challenges` → EIP-191 sign → `POST /policies`. Explore / challenge / persist require **W2** (`422 SCAN_NOT_LATEST` / `503 DISCOVERY_UNAVAILABLE`). Replace = **NB1** DELETE then new signed persist. Retry / conflict → **409** `POLICY_ALREADY_EXISTS` — reconcile via `GET /policies` + `payload_sha256`.
 
@@ -725,7 +725,6 @@ Use this checklist before opening or merging API coherency documentation changes
 
 - `cafe-discovery/openapi/discovery-v1.yaml` for the Discovery v1 contract.
 - `cafe-crypto-policy-mgt/openapi/cpm-v1.yaml` for the CPM v1 contract (includes Capability Provider fields post-CPM-P4b / amendement P8–P10).
-- [docs/security/cpm-contract.md](./docs/security/cpm-contract.md) for CPM authentication, scan authorization, service-token, and troubleshooting details.
 - `docs/api/api-v1-qa-checklist.md` for a compact reviewer checklist.
 - [04-cafe-admin-guide.md](./04-cafe-admin-guide.md) for platform administration (deploy Compose + minikube, CPM catalogue, signals).
 - [cafe-deploy](https://github.com/create2-labs/cafe-deploy) — Docker Compose deployment (still supported).

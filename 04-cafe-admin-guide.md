@@ -120,7 +120,6 @@ Integrators and API consumers should use [03-cafe-developer-guide.md](./03-cafe-
 | Cloudflare Tunnel (selfhosted, no inbound ports)   | Overview + commands           | [cafe-deploy Cloudflare Tunnel](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#cloudflare-tunnel-home--no-inbound-ports), [CAFE_selfhosted.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/CAFE_selfhosted.md)       |
 | minikube / Helm / kubectl                          | Overview + necessary commands | [cafe-expresso](https://github.com/create2-labs/cafe-expresso), `[docs/k8s.md](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)`, [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md) |
 | HTTP API integration (`curl`, payloads)            | Minimal (diagnosis only)      | [03-cafe-developer-guide.md](./03-cafe-developer-guide.md)                                                                                                                                                                                           |
-| CPM auth contract, error codes                     | Pointers                      | [docs/security/cpm-contract.md](./docs/security/cpm-contract.md)                                                                                                                                                                                     |
 | Explore rejection observability                    | Pointers + checklist          | [docs/operations/cpm-explore-no-candidate-observability.md](./docs/operations/cpm-explore-no-candidate-observability.md)                                                                                                                             |
 | PostgreSQL retention, soft-delete growth, capacity | Monitoring + remediation      | This guide § [PostgreSQL retention and capacity](#postgresql-retention-and-capacity)                                                                                                                                                                 |
 | Product rules (W1–W8, immutability)                | Summary                       | [functional-specifications.md](./functional-specifications.md)                                                                                                                                                                                       |
@@ -633,8 +632,6 @@ CPM business routes require a **Discovery session JWT**. There is no separate CP
 
 Tokens must match across Discovery and CPM compose env. Mismatch symptoms: CPM `503` on explore, scan delete `503 POLICY_REFERENCE_CHECK_UNAVAILABLE`, or persistent `401`/`403` on CPM while Discovery works.
 
-Full route classification: [docs/security/cpm-contract.md](./docs/security/cpm-contract.md).
-
 **Admin** `curl` **diagnosis** uses a normal user JWT (sign-in) — same as the developer guide. Service tokens are for inter-service calls only.
 
 On **minikube**, sign up / sign in via the edge:
@@ -999,8 +996,8 @@ Compare wallet `chain_ids` from Discovery detail with provider chain support fro
 | “No wallet scan on CPM page”                     | Discovery scans exist, scan `completed`                                                                    | W7 gate — newest scan must be completed; see functional specs                                                              |
 | “Policy greyed out / incompatible”               | Explore rejection code                                                                                     | Catalogue CP `allowed_providers` + provider chain/posture vs scan                                                          |
 | “Cannot delete scan”                             | `409 SCAN_REFERENCED_BY_POLICY`                                                                            | User must delete or rebind CPM policy first (W3/W4)                                                                        |
-| “CPM page errors / session”                      | Browser network tab on `/api/cpm/v1`                                                                       | CPM auth env, Discovery session validation URL                                                                             |
-| “Persist failed” / constraints incompatible      | Wallet challenge + signed `POST /policies` + `user_constraints`                                            | [CP-PERSIST runbook](./docs/security/cp-persist-v1.md); couche B signal if `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`        |
+| “CPM page errors / session”                      | Browser network tab on `/api/cpm/v1`                                                                       | Check the CPM and Discovery responses on that path                                                                        |
+| “Persist failed” / constraints incompatible      | Wallet challenge + signed `POST /policies` + `user_constraints`                                            | [CP-PERSIST runbook](./docs/architecture/cpm-v1-flow.md); couche B signal if `PROVIDER_USER_CONSTRAINTS_INCOMPATIBLE`        |
 | Scan not latest on explore/persist               | W2 gate                                                                                                    | Re-select latest completed scan; **422** `SCAN_NOT_LATEST`                                                                 |
 
 
@@ -1052,14 +1049,11 @@ Admins do **not** mutate user persisted policies through catalogue files. Catalo
 - [functional-specifications.md](./functional-specifications.md) — product rules and governance (W1–W8)
 - [cafe-crypto-policy-mgt README](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/README.md) — CPM service, env vars, local run
 - [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) — Docker Compose, release workflow, env catalog
-- [cafe-deploy — Cloudflare Tunnel](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#cloudflare-tunnel-home--no-inbound-ports) — prod-tunnel compose + cloudflared
-- [CAFE_selfhosted.md](https://github.com/create2-labs/cafe-deploy/blob/main/docs/CAFE_selfhosted.md) — home OpenWrt + tunnel end-to-end
 - [cafe-expresso](https://github.com/create2-labs/cafe-expresso) — minikube Helm / Argo CD; `[docs/k8s.md](https://github.com/create2-labs/cafe-expresso/blob/main/docs/k8s.md)` kubectl tutorial
 - [ADR GitOps](https://github.com/create2-labs/cafe-deploy/blob/main/ADR/ADR_20260708_gitops.md) — P0 backlog PR0–PR9
 - [CPM v1 flow](./docs/architecture/cpm-v1-flow.md) — Option A scan → explore → persist
 - [CPM explore observability runbook](./docs/operations/cpm-explore-no-candidate-observability.md)
-- [CPM auth contract](./docs/security/cpm-contract.md)
-- [CP-PERSIST (no drafts)](./docs/security/cp-persist-v1.md)
+- [CP-PERSIST (no drafts)](./docs/architecture/cpm-v1-flow.md)
 - [ADR — remove CP drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)
 - [RUNBOOK_CP_PERSISTENCE](https://github.com/create2-labs/cafe-deploy/blob/main/docs/RUNBOOK_CP_PERSISTENCE.md) — durable CP via cafe-persistence
 - [cafe-deploy TODO — Postgres retention](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md#postgres-retention--cp--scan-tables-grow-without-bound-soft-delete) — planned compaction work

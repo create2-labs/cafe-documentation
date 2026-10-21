@@ -6,9 +6,8 @@
       2. [Repositories](#repositories)
    2. [Architecture](#architecture)
       1. [Logical view](#logical-view)
-      2. [Authentication flow](#authentication-flow)
-      3. [CPM ↔ Discovery coupling](#cpm--discovery-coupling)
-      4. [On-chain indexer gateway](#on-chain-indexer-gateway)
+      2. [CPM ↔ Discovery coupling](#cpm--discovery-coupling)
+      3. [On-chain indexer gateway](#on-chain-indexer-gateway)
    3. [Public HTTP API](#public-http-api)
    4. [Discovery service](#discovery-service)
       1. [Components](#components)
@@ -53,10 +52,10 @@ This document describes **how CAFE is built and operated**: services, APIs, pers
 | Area | Technology / pattern |
 | --- | --- |
 | Discovery API | Go (Fiber), OpenAPI v1, PostgreSQL, Redis cache, NATS events |
-| CPM API | Go, durable CP via HTTP → cafe-persistence → **Postgres only** (P0; no Redis CP cache), JWT from Discovery |
+| CPM API | Go, durable CP via HTTP → cafe-persistence → **Postgres only** (P0; no Redis CP cache) |
 | Scanners | Separate worker images (wallet EVM, TLS) |
 | On-chain indexer | `cafe-indexer-gateway`: sole Moralis or Etherscan caller, NATS page subject |
-| Frontend | Web SPA (React), Bearer session to Discovery/CPM |
+| Frontend | Web SPA (React) |
 | Edge | NGINX (or equivalent) — `/api/discovery/v1`, `/api/cpm/v1` |
 | Contracts | Shared wire types in `cafe-contracts` |
 
@@ -66,7 +65,8 @@ Non-goals for this document: line-by-line OpenAPI field lists (see per-repo `ope
 
 | Repository | Role |
 | --- | --- |
-| `cafe-discovery` | Discovery API, persistence service, scanners, OpenAPI |
+| `cafe-discovery` | Discovery API and OpenAPI |
+| `cafe-persistence` | Scan and policy persistence |
 | `cafe-crypto-policy-mgt` | CPM API, policy domain, immutability guards |
 | `cafe-frontend` | User interface |
 | `cafe-deploy` | Compose, Ansible, smoke scripts, runbooks; Cloudflare Tunnel prod-tunnel edge |
@@ -84,56 +84,56 @@ Non-goals for this document: line-by-line OpenAPI field lists (see per-repo `ope
 ### Logical view
 
 ```text
-                    ┌─────────────────────────────────────┐
-                    │           Edge (TLS, routing)        │
-                    │  /api/discovery/v1/*  /api/cpm/v1/* │
-                    └───────────┬─────────────┬───────────┘
-                                │             │
-              ┌─────────────────▼──┐    ┌─────▼──────────────┐
-              │   cafe-discovery   │    │ cafe-crypto-policy │
-              │   cmd/server       │    │      -mgt          │
-              └─────────┬──────────┘    └─────────┬──────────┘
-                        │                         │
-         ┌──────────────┼──────────────┐          │
-         ▼              ▼              ▼          ▼
-    ┌─────────┐   ┌──────────┐  ┌────────┐  ┌────────┐
-    │  NATS   │   │ Postgres │  │ Redis  │  │  NATS  │
-    └────┬────┘   └──────────┘  └────────┘  └────────┘
-         │
-    ┌────▼────────────────────────────┐
-    │ cmd/scanner (wallet)            │
-    │ cmd/scanner / TLS worker        │
-    │ cmd/persistence (event writers) │
-    └─────────────────────────────────┘
+                         ┌──────────────────────────┐
+                         │ Edge (routing)           │
+                         │ /api/discovery/v1/*      │
+                         │ /api/cpm/v1/*            │
+                         └────────────┬─────────────┘
+                                      │
+              ┌───────────────────────┼────────────────────────┐
+              ▼                       ▼                        ▼
+     ┌─────────────────┐   ┌────────────────────┐   ┌────────────────────┐
+     │ cafe-discovery  │   │ cafe-crypto-policy │   │ cafe-indexer-      │
+     │ cmd/server      │   │ -mgt               │   │ gateway            │
+     └────────┬────────┘   └─────────┬──────────┘   └─────────┬──────────┘
+              │                      │                        │
+              ▼                      ▼                        ▼
+     ┌─────────────────┐   ┌────────────────────┐   ┌────────────────────┐
+     │ NATS            │   │ cafe-persistence   │   │ Moralis / Etherscan│
+     └────────┬────────┘   │ cmd/persistence    │   └────────────────────┘
+              │            └─────────┬──────────┘
+              ├──────────────────────┤
+              ▼                      ▼
+     ┌─────────────────┐   ┌────────────────────┐
+     │ cafe-scanner-   │   │ Postgres           │
+     │ wallet          │   └────────────────────┘
+     │ cafe-scanner-tls│
+     └─────────────────┘
 ```
 
-### Authentication flow
-
-1. Client obtains Bearer token from Discovery `POST /auth/signin`.
-2. Discovery and CPM validate the same JWT (opaque to clients).
-3. CPM does not issue a separate user token.
+Discovery publishes scan work on NATS. `cafe-scanner-wallet` and `cafe-scanner-tls` perform the scans. `cafe-persistence` writes scan and policy state to Postgres. `cafe-indexer-gateway` is the only caller of Moralis or Etherscan.
 
 ### CPM ↔ Discovery coupling
 
-- **Synchronous:** CPM HTTP handlers call Discovery v1 wallet scan list/detail (service token or user token per route class).
+- **Synchronous:** CPM HTTP handlers call Discovery v1 wallet scan list/detail.
 - **Guards:** `internal/app/auth.go` — W2 (`latest=true` completed, owner-scoped), TLS rejection. Legacy W7-only narratives superseded for CPM engagement (ADR_20260824 / RD-P6).
 - **Async:** `POST …/policies/assessment/request` loads wallet detail server-side; rejects TLS.
 
-See [docs/architecture/cpm-v1-flow.md](./docs/architecture/cpm-v1-flow.md) and [CP-PERSIST V1 runbook](./docs/security/cp-persist-v1.md).
+See [docs/architecture/cpm-v1-flow.md](./docs/architecture/cpm-v1-flow.md) and [cafe-crypto-policy-mgt `docs/CP_PERSIST.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/docs/CP_PERSIST.md).
 
 ### On-chain indexer gateway
 
-`cafe-indexer-gateway` is the only process that calls Moralis or Etherscan. `searchHistory` stays in `cafe-scanner-wallet`. The gateway selects one provider at startup: Etherscan when `ETHERSCAN_API_KEY` is non-empty after trim, otherwise Moralis when `MORALIS_API_KEY` is non-empty, otherwise `none`. It does not fail over or mix providers. It does not publish scanner presence. Readiness is `GET /health`: `UP` only when NATS is ready for the current connection generation. The selected name (`etherscan`, `moralis`, or `none`) is the startup log and a single `indexer_gateway_provider_info` series set to 1. It is not a field of `/health`, of presence, of the page contract, or of a screen. The TLS scanner still publishes presence with its local `ScannerPresenceMessage`.
+`cafe-indexer-gateway` is the only process that calls Moralis or Etherscan. `searchHistory` stays in `cafe-scanner-wallet`. The gateway selects one provider at startup: `etherscan`, `moralis`, or `none`. It does not fail over or mix providers. It does not publish scanner presence. Readiness is `GET /health`: `UP` only when NATS is ready for the current connection generation. The selected name is the startup log and a single `indexer_gateway_provider_info` series set to 1. It is not a field of `/health`, of presence, of the page contract, or of a screen. The TLS scanner still publishes presence with its local `ScannerPresenceMessage`.
 
 The chain file mounted on the gateway is the catalogue. Every page request is checked against it first. An unknown `chain_id` is `unsupported_chain` and the provider is not called. `moralis_chain_name` is required only after that check, and only when Moralis is selected. A known chain without that alias is a configuration error. Etherscan does not use the alias.
 
-Secrets and the two Etherscan ceilings exist only on this service. The stack runs one replica. The daily counter is in memory and best-effort: it resets on process restart and at UTC midnight, with no shared store. `ETHERSCAN_API_KEY` is empty for this cutover. The image is `oleglod/cafe-indexer-gateway`. The cutover is one stack deployment.
+The stack runs one replica. The daily counter is in memory and best-effort: it resets on process restart and at UTC midnight, with no shared store. The image is `oleglod/cafe-indexer-gateway`. The cutover is one stack deployment.
 
-`GET /api/indexer-gateway/health` rewrites to `GET /health` and enters `platform_up`. A refused authentication, a provider quota, an HTTP failure, or provider `none` does not fail the probe. A failed blackbox probe fails `platform_up`, so `/platform/status` becomes `DOWN`. That page stays one `UP` or `DOWN`. There is no Grafana row and no screen for the provider name. `indexer_gateway_no_provider_total` counts `no_provider` replies.
+`GET /api/indexer-gateway/health` rewrites to `GET /health` and enters `platform_up`. A provider quota, an HTTP failure, or provider `none` does not fail the probe. A failed blackbox probe fails `platform_up`, so `/platform/status` becomes `DOWN`. That page stays one `UP` or `DOWN`. There is no Grafana row and no screen for the provider name. `indexer_gateway_no_provider_total` counts `no_provider` replies.
 
-The page subject is `cafe.indexer.gateway.transactions.page.v1`, queue group `cafe-indexer-gateway`. The wallet scanner, including `cmd/cli/publickey`, publishes the request and does not subscribe. The reply inbox is required. A message without one is dropped before decode and before any provider call: no publication and no error envelope. The gateway publishes only on that inbox. There is no NATS ACL. The subject and the gateway ports stay inside the stack. Only `/health` is reached through the edge. There is no `GET /provider`. Ceilings are not endpoint fields.
+The page subject is `cafe.indexer.gateway.transactions.page.v1`, queue group `cafe-indexer-gateway`. The wallet scanner, including `cmd/cli/publickey`, publishes the request and does not subscribe. The reply inbox is required. A message without one is dropped before decode and before any provider call: no publication and no error envelope. The gateway publishes only on that inbox. Only `/health` is reached through the edge. There is no `GET /provider`.
 
-API-started scans go through Discovery, which checks credentials. `cmd/cli/publickey` publishes on the internal bus directly. Validation and the limiter are not authentication. A process already on that bus can consume quota if it supplies a reply inbox, bounded by 32 concurrent handlers. Without a reply inbox the provider is not called.
+API-started scans go through Discovery. `cmd/cli/publickey` publishes on the internal bus directly. Without a reply inbox the provider is not called.
 
 `GET /discovery/v1/onchainscanner` returns only `scanner_available`. It does not return `onchain_indexer` or a provider name. Networks does not show the provider or a gateway presence.
 
@@ -149,7 +149,7 @@ Canonical path prefixes (edge):
 | CPM | `/api/cpm/v1` |
 | Indexer gateway readiness | `/api/indexer-gateway/health` → service `GET /health` (not `/api/health`; no `GET /provider`) |
 
-**Public deploy version** (outside v1 prefixes, no auth):
+**Public deploy version** (outside v1 prefixes):
 
 | Service | Edge | Direct (dev) | Body |
 | --- | --- | --- | --- |
@@ -172,13 +172,11 @@ Full route tables: [03-cafe-developer-guide.md](./03-cafe-developer-guide.md) an
 
 | Binary / package | Responsibility |
 | --- | --- |
-| `cmd/server` | HTTP API, auth, scan enqueue, v1 handlers |
-| `cmd/persistence` | NATS consumers → Postgres writers |
-| `cmd/scanner` | Wallet scan execution |
-| TLS scanner image | Endpoint TLS analysis |
+| `cmd/server` | HTTP API, scan enqueue, v1 handlers |
 | `internal/handler/discovery_v1_*.go` | v1 list/detail/delete/CBOM |
-| `internal/persistence/storage/postgres.go` | Row-per-execution writers |
 | `openapi/discovery-v1.yaml` | Machine-readable contract |
+
+Scan execution and row writes are not Discovery binaries. `cafe-scanner-wallet` (`cmd/scanner-wallet`) and `cafe-scanner-tls` (`cmd/scanner-tls`) perform the scans. `cafe-persistence` (`cmd/persistence`) is the single writer of `scan.started`, `scan.completed`, and `scan.failed`, and it serves `internal/cp/v1`.
 
 The wallet scanner must gate EIP-7702 designator parsing with an explicit per-chain capability. Missing or unknown capability is disabled; the 23-byte pattern cannot enable the interpretation by itself. The common inventory, official evidence, configuration ownership, parsing rules, and minimum test matrix are defined in [Wallet scanner — EIP-7702 chain activation](./docs/wallet-scanner-eip7702-chain-support.md).
 
@@ -202,7 +200,7 @@ Redis is used for **scan** acceleration only — not for durable crypto policies
 
 - Delete wallet scan: evict Redis address key only when **no** remaining Postgres rows for that address.
 - Optional Redis CP cache (`cpm:v1:…`) is **P1+** only (ADR §8.2); never replaces Postgres.
-- Wallet challenges are stateless (no Redis proof store); signed persist is `POST /policies` — see [cp-persist-v1.md](./docs/security/cp-persist-v1.md).
+- Wallet challenges are stateless (no Redis proof store); signed persist is `POST /policies` — see [docs/architecture/cpm-v1-flow.md](./docs/architecture/cpm-v1-flow.md).
 
 ### Error codes (representative)
 
@@ -335,7 +333,7 @@ Delivery history (CPM-UI-1…8) assumed server drafts; **runtime path** after RD
 | Replace | NB1 DELETE then re-persist |
 | Resume | Session / deep link; no server draft CRUD |
 
-**Persist UX:** local structural validation at start of **Persist**; wallet-challenge only after it succeeds. See [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
+**Persist UX:** local structural validation at start of **Persist**; wallet-challenge only after it succeeds. See [docs/architecture/cpm-v1-flow.md](./docs/architecture/cpm-v1-flow.md).
 
 **Entry modes:** cold start scan picker, session resume, Discovery `?scanId=`, in-page scan change with W2 re-anchor.
 
@@ -387,8 +385,6 @@ Shared UI + `/api/*` locations live in `templates/nginx/cafe-locations.inc.templ
 | `lib/discovery-v1-http-smoke.sh` | Legacy 404 |
 
 - **Atomic deploy:** IMM-2 (schema/index) + IMM-3 (writers) in same window — see `cafe-deploy/docs/RUNBOOK_SCAN_HISTORY.md`.
-
-Security hardening: `cafe-deploy/SECURITY_ENHANCEMENT.md`, [`docs/security/cpm-contract.md`](./docs/security/cpm-contract.md).
 
 ---
 
@@ -495,4 +491,3 @@ cd cafe-deploy/scripts
 | [WORKPLAN_API.md](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) | Normative API workplan |
 | [cafe-discovery README](https://github.com/create2-labs/cafe-discovery/blob/main/README.md) | Service operations |
 | [cafe-deploy README](https://github.com/create2-labs/cafe-deploy/blob/main/README.md) | Deploy and scripts |
-| [cpm-contract.md](./docs/security/cpm-contract.md) | CPM security contract |

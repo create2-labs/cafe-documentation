@@ -25,7 +25,7 @@ This guide explains how to use the CAFE frontend to discover, assess, and manage
   - Comments: Reshape **Crypto Policy Management** for the three-tab shell (Introduction / Dashboard / Crypto Policy Mgt); jargon-free concepts (latest completed scan, stale vs latest scan, catalog match, hard constraints); stable deep-link anchors for SPA Learn more targets; representative UI screenshots under `images/` for the main gate cases. Internal nicknames (W2, couche A/B) are reserved for operator/developer notes — not the main task path.
 - v0.8.0
   - Date: August 27th, 2026
-  - Comments: Align CPM UX with ADR_20260824 — no server draft / Save draft / rebind; local composition (NB2); W2 scan anchoring; signed persist + NB1 replace. See [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) and [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
+  - Comments: Align CPM UX with ADR_20260824 — no server draft / Save draft / rebind; local composition (NB2); W2 scan anchoring; signed persist + NB1 replace. See [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md) and [CP-PERSIST runbook](./docs/architecture/cpm-v1-flow.md).
 - v0.7.0
   - Date: August 22nd, 2026
   - Comments: Rewrite **Crypto Policy Management** for the two-layer model (ADR amendement): select Crypto Policy from catalogue → explore **scan-compatible** providers → validate **user constraints** explicitly → persist with `user_constraints`. No FE hard-coded Nicetry defaults; `key_rotation` lives in the constraints panel (not on explore re-request). See [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md).
@@ -662,7 +662,7 @@ CAFE allows **at most one** active recommended Crypto Policy per owner + wallet 
 - Capability Provider model: [ADR_20260803_cp_provider_abstraction](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260803_cp_provider_abstraction.md)
 - Catalogue facts / frontend boundary (incl. catalog table, greenfield, multi-chain choice): [ADR_20260918_cpm_catalog_facts_frontend_boundary](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary.md) · [PR plan CFB-\*](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260918_cpm_catalog_facts_frontend_boundary_PR_PLAN.md)
 - Remove CP drafts: [ADR_20260824_remove_cp_drafts](https://github.com/create2-labs/cafe-adr/blob/main/ADR_20260824_remove_cp_drafts.md)
-- Wallet signature at persist: [CP-PERSIST runbook](./docs/security/cp-persist-v1.md)
+- Wallet signature at persist: [CP-PERSIST runbook](./docs/architecture/cpm-v1-flow.md)
 
 > **For operators / developers:** internal nicknames such as W2 (latest completed scan probe) and couche A/B (catalog match vs hard constraints) appear in ADRs, developer guides, and some current UI badges on the screenshots above. The HTML anchor id `#cpm-scan-and-catalogue` is kept stable for existing deep links even though user-facing spelling is **catalog**. The user-facing vocabulary in this chapter is authoritative for the SPA Learn more targets.
 

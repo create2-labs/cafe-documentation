@@ -108,27 +108,26 @@ Normative HTTP contracts: [WORKPLAN_API.md](https://github.com/create2-labs/cafe
 
 ## Architecture
 
-CAFE follows a **three-layer product architecture** plus shared infrastructure:
+The product layers are Discovery, Crypto Policy Manager, and Remediation. The diagram under the table is the running service ownership.
 
 | Layer | Responsibility | Primary outputs |
 | --- | --- | --- |
 | **Discovery** | Identify on-chain and network exposures | Scan lists, detail DTOs, CBOM |
 | **Crypto Policy Manager** | Govern cryptographic choices | Policy instances, compliance assessment |
 | **Remediation** | Sign and migrate wallets with PQC + ZK (roadmap) | Signed operations, audit trail |
-| **Infrastructure** | Deploy, monitor, secure the ecosystem | Metrics, logs, edge routing |
+| **Infrastructure** | Deploy and monitor the ecosystem | Metrics, logs, edge routing |
 
 ```text
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  Frontend   │────▶│ Edge / API   │────▶│  Discovery  │
-│  (browser)  │     │   gateway    │     │   (scans)   │
-└─────────────┘     └──────┬───────┘     └──────┬──────┘
-                           │                    │
-                           ▼                    ▼
-                    ┌──────────────┐     ┌─────────────┐
-                    │     CPM      │◀────│  Scanners   │
-                    │  (policies)  │     │  (wallet/TLS)│
-                    └──────────────┘     └─────────────┘
+Frontend → Edge → Discovery API (cmd/server)
+              └→ CPM
+Discovery API → NATS → cafe-scanner-wallet
+                    └→ cafe-scanner-tls
+NATS → cafe-persistence → Postgres
+CPM → cafe-persistence (internal/cp/v1)
+cafe-indexer-gateway → Moralis or Etherscan
 ```
+
+Discovery publishes scan work on NATS. The two scanners perform the scans. `cafe-persistence` is the single writer of scan lifecycle events and of crypto-policy rows. The indexer gateway is the only Moralis or Etherscan caller.
 
 **CPM integration:** the UI and CPM correlate work by **`scan_id`** from Discovery v1 wallet scans. TLS scans remain Discovery-only for product flows. See [docs/architecture/cpm-v1-flow.md](./docs/architecture/cpm-v1-flow.md).
 
@@ -308,7 +307,7 @@ States: `requested` → `started` → `completed` | `failed` (or `requested` →
 - EOA without signed authorization → **403** `WALLET_CONTROL_PROOF_REQUIRED`. Active policy conflict / retry → **409** `POLICY_ALREADY_EXISTS` (reconcile via GET + `payload_sha256`).
 - **NB1 replace:** DELETE policy (JWT) then new signed persist — not atomic.
 - V1 persist is **EOA-only**; non-EOA → **422** `UNSUPPORTED_WALLET_TYPE`.
-- Details: [CP-PERSIST runbook](./docs/security/cp-persist-v1.md).
+- Details: [CP-PERSIST runbook](./docs/architecture/cpm-v1-flow.md).
 
 #### Read policies
 
@@ -442,7 +441,7 @@ A wallet may have at most **one** active persisted CP (W1). There is **no** dual
 1. User clicks **Persist**.
 2. **Local structural validation** runs — not a CPM backend validate API.
 3. On failure: show validation issues; **do not** open MetaMask or call `wallet-challenges` / `POST /policies`.
-4. On success: `POST …/wallet-challenges` → `personal_sign` → **`POST …/policies`** ([CP-PERSIST](./docs/security/cp-persist-v1.md)).
+4. On success: `POST …/wallet-challenges` → `personal_sign` → **`POST …/policies`** ([CP-PERSIST](./docs/architecture/cpm-v1-flow.md)).
 5. If **409** / existing policy: reconcile via GET + `payload_sha256`; replace via **NB1** (DELETE then new persist).
 
 #### Historical US1–US21 note
@@ -517,7 +516,7 @@ Wire event: `cafe.discovery.wallet.observed` v0.1 — see [03-cafe-developer-gui
 5. Validate user constraints in UI (couche B indicative); keep composition locally (NB2) — **no** `POST …/drafts`.
 6. Persist (EOA): `POST …/wallet-challenges` → EIP-191 sign → **`POST …/policies`** with `signed_message` + `signature` + closed payload.
 
-See [CP-PERSIST runbook](./docs/security/cp-persist-v1.md) and CPM UI persist flow above.
+See [CP-PERSIST runbook](./docs/architecture/cpm-v1-flow.md) and CPM UI persist flow above.
 
 ### Delete scan protected by policy (W3 / W4)
 
